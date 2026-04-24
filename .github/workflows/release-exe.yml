@@ -1,0 +1,190 @@
+name: Release executables
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-executable:
+    name: Build ${{ matrix.artifact-name }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact-name: SoilTillerCalculator-windows
+          - os: ubuntu-latest
+            artifact-name: SoilTillerCalculator-linux-x86_64
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+
+      - name: Install build dependencies
+        run: python -m pip install -e . pyinstaller
+
+      - name: Build executable
+        run: pyinstaller --onefile --windowed --name SoilTillerCalculator --collect-data soil_tiller_calculator src/soil_tiller_calculator/__main__.py
+
+      - name: Rename Linux executable
+        if: runner.os == 'Linux'
+        run: mv dist/SoilTillerCalculator dist/SoilTillerCalculator-linux-x86_64
+
+      - name: Build Debian package
+        if: runner.os == 'Linux'
+        run: |
+          version="$(python -c 'from soil_tiller_calculator.version import __version__; print(__version__)')"
+          package_root="dist/deb-package"
+
+          mkdir -p "$package_root/DEBIAN"
+          mkdir -p "$package_root/opt/soil-tiller-calculator"
+          mkdir -p "$package_root/usr/bin"
+
+          cp dist/SoilTillerCalculator-linux-x86_64 "$package_root/opt/soil-tiller-calculator/soil-tiller-calculator"
+          chmod 755 "$package_root/opt/soil-tiller-calculator/soil-tiller-calculator"
+          ln -s /opt/soil-tiller-calculator/soil-tiller-calculator "$package_root/usr/bin/soil-tiller-calculator"
+
+          cat > "$package_root/DEBIAN/control" <<EOF
+          Package: soil-tiller-calculator
+          Version: $version
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: soil-tiller-calculator contributors
+          Description: Desktop calculator for soil tiller energy parameters.
+          EOF
+
+          dpkg-deb --build "$package_root" "dist/SoilTillerCalculator-linux-x86_64.deb"
+
+      - name: Rename Windows executable
+        if: runner.os == 'Windows'
+        run: Rename-Item -Path dist/SoilTillerCalculator.exe -NewName SoilTillerCalculator-windows.exe
+
+      - name: Upload executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: dist/${{ matrix.artifact-name }}*
+          if-no-files-found: error
+
+      - name: Attach executable to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ matrix.artifact-name }}*
+
+  publish-apt-repository:
+    name: Publish APT repository
+    needs: build-executable
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+
+    env:
+      APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+      APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Debian package
+        uses: actions/download-artifact@v4
+        with:
+          name: SoilTillerCalculator-linux-x86_64
+          path: apt-incoming
+
+      - name: Install APT repository tools
+        run: sudo apt-get update && sudo apt-get install -y apt-utils dpkg-dev gnupg
+
+      - name: Import APT signing key
+        run: |
+          if [ -z "$APT_SIGNING_KEY" ]; then
+            echo "APT_SIGNING_KEY secret is required to publish a signed APT repository."
+            exit 1
+          fi
+
+          printf '%s' "$APT_SIGNING_KEY" | gpg --batch --import
+          key_id="$(gpg --batch --list-secret-keys --with-colons | awk -F: '/^sec/ { print $5; exit }')"
+
+          if [ -z "$key_id" ]; then
+            echo "No secret GPG key was imported from APT_SIGNING_KEY."
+            exit 1
+          fi
+
+          echo "APT_SIGNING_KEY_ID=$key_id" >> "$GITHUB_ENV"
+
+      - name: Publish package index to gh-pages
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$RUNNER_TEMP/apt-package"
+          cp apt-incoming/*.deb "$RUNNER_TEMP/apt-package/"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.signingkey "$APT_SIGNING_KEY_ID"
+          git config commit.gpgsign true
+          cat > "$RUNNER_TEMP/gpg-wrapper" <<'EOF'
+          #!/usr/bin/env bash
+          exec gpg --batch --yes --pinentry-mode loopback --passphrase "$APT_SIGNING_KEY_PASSPHRASE" "$@"
+          EOF
+          chmod 700 "$RUNNER_TEMP/gpg-wrapper"
+          git config gpg.program "$RUNNER_TEMP/gpg-wrapper"
+
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages
+            git checkout gh-pages
+          else
+            git checkout --orphan gh-pages
+            git rm -rf . || true
+          fi
+
+          mkdir -p pool/main/s/soil-tiller-calculator
+          cp "$RUNNER_TEMP"/apt-package/*.deb pool/main/s/soil-tiller-calculator/
+
+          mkdir -p dists/stable/main/binary-amd64
+          dpkg-scanpackages --arch amd64 pool > dists/stable/main/binary-amd64/Packages
+          gzip -kf dists/stable/main/binary-amd64/Packages
+
+          cat > apt-ftparchive.conf <<EOF
+          APT::FTPArchive::Release {
+            Origin "soil-tiller-calculator";
+            Label "soil-tiller-calculator";
+            Suite "stable";
+            Codename "stable";
+            Architectures "amd64";
+            Components "main";
+            Description "Soil Tiller Calculator APT repository";
+          };
+          EOF
+
+          apt-ftparchive -c apt-ftparchive.conf release dists/stable > dists/stable/Release
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$APT_SIGNING_KEY_PASSPHRASE" --local-user "$APT_SIGNING_KEY_ID" --armor --detach-sign --output dists/stable/Release.gpg dists/stable/Release
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$APT_SIGNING_KEY_PASSPHRASE" --local-user "$APT_SIGNING_KEY_ID" --clearsign --output dists/stable/InRelease dists/stable/Release
+          gpg --batch --yes --armor --export "$APT_SIGNING_KEY_ID" > soil-tiller-calculator-archive-keyring.asc
+
+          git add pool dists soil-tiller-calculator-archive-keyring.asc apt-ftparchive.conf
+          if git diff --cached --quiet; then
+            echo "APT repository is already up to date."
+          else
+            git commit -S -m "chore: publish apt repository for ${GITHUB_REF_NAME}"
+            git push origin gh-pages
+          fi

@@ -25,6 +25,37 @@
 
 ## Установка
 
+### Ubuntu через APT-репозиторий
+
+Подключите ключ репозитория:
+
+```bash
+curl -fsSL https://alxprgs.github.io/soil-tiller-calculator/soil-tiller-calculator-archive-keyring.asc \
+  | sudo gpg --dearmor -o /usr/share/keyrings/soil-tiller-calculator-archive-keyring.gpg
+```
+
+Добавьте APT-репозиторий:
+
+```bash
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/soil-tiller-calculator-archive-keyring.gpg] https://alxprgs.github.io/soil-tiller-calculator stable main" \
+  | sudo tee /etc/apt/sources.list.d/soil-tiller-calculator.list
+```
+
+Установите приложение:
+
+```bash
+sudo apt update
+sudo apt install soil-tiller-calculator
+```
+
+После установки приложение доступно из любой директории:
+
+```bash
+soil-tiller-calculator
+```
+
+### Из исходников
+
 Требуется Python 3.11 или новее.
 
 ```powershell
