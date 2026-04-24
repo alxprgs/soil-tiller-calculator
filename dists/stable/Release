@@ -1,24 +1,24 @@
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Fri, 24 Apr 2026 22:38:27 +0000
+Date: Fri, 24 Apr 2026 22:51:13 +0000
 Description: Soil Tiller Calculator APT repository
 Label: soil-tiller-calculator
 Origin: soil-tiller-calculator
 Suite: stable
 MD5Sum:
- 429971fc70b8b03780017b185715741d              219 Release
+ c3910faf04c76e2db458324c2c70064d              219 Release
  d41d8cd98f00b204e9800998ecf8427e                0 main/binary-amd64/Packages
- 07bdc455591e4df8311d63f81167223f               29 main/binary-amd64/Packages.gz
+ f88b3e126aa8eced55d9fde8c85a4e28               29 main/binary-amd64/Packages.gz
 SHA1:
- c7c9ebd53a2f2eee2d603cd6701d10173ce28328              219 Release
+ cf86ca231bd24f27dcc943751a0f74ee77f0f6e9              219 Release
  da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-amd64/Packages
- b0396eed0c192337a0e8c77a3f866545652e1c00               29 main/binary-amd64/Packages.gz
+ 590925d2f7700374b091e07f5ae4c0dbd7aac83d               29 main/binary-amd64/Packages.gz
 SHA256:
- 977338dc82a59acb8169efe0ff5c5e453753cd39dbc7cce1e84540308d95622d              219 Release
+ c082db09f4846dab662af76dc518ab988ceaa2fd5068630f6fd8cb642a05422a              219 Release
  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-amd64/Packages
- 61d1045a9f385cb3e30c7fc590135d0cfc994cc677c4492b6b871e762ce058f7               29 main/binary-amd64/Packages.gz
+ d5dfa9a7e0a9161d1729cea89db7df639ab8d5935623c87454d3da729935948b               29 main/binary-amd64/Packages.gz
 SHA512:
- 16d92d71aab1dde982e6bcc072a2a75292ee39e45230c65a0df7714637b4afef09106b53032e5c2e7c31de93695d485097022e8b82e2ee74b55bd63e1983bc57              219 Release
+ 0a9760e0af03f2f1004e75bed1f6251b9903b5fbd2f95962249216d04821e9d04a833f1100f41bf3ee1a0ea4549a8e5764dcef9b818199b8ce3e0aba2259610b              219 Release
  cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-amd64/Packages
- 347c1b0e4f7a7206158e6fda92db106c737daa00a3c6275d5e1f461443efa2512013b7a7d7f2a2bd44f725ded247db130ef95df5be97f56c6db3b13b91d6ae3a               29 main/binary-amd64/Packages.gz
+ 9d60a917604711158fd8f96aa5090045bcd24d9c0b6844466721e34d8878a57c118a8553f6885543f94a060fa6d59b72117e25189cb0b4dd05f6bcd512a2ba02               29 main/binary-amd64/Packages.gz
