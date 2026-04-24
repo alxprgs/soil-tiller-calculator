@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "soil-tiller-calculator"
+dynamic = ["version"]
+description = "Desktop calculator for soil tiller energy parameters."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "matplotlib>=3.8",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+    "pytest-cov>=5",
+]
+
+[project.scripts]
+soil-tiller-calculator = "soil_tiller_calculator.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+soil_tiller_calculator = ["locales/*.json"]
+
+[tool.setuptools.dynamic]
+version = {attr = "soil_tiller_calculator.version.__version__"}
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider --cov=soil_tiller_calculator --cov-report=term-missing --cov-fail-under=80"
+
+[tool.coverage.run]
+omit = [
+    "src/soil_tiller_calculator/__main__.py",
+    "src/soil_tiller_calculator/app.py",
+    "src/soil_tiller_calculator/gui.py",
+]
