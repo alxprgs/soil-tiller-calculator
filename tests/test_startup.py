@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import tkinter as tk
 
+import pytest
+
 from soil_tiller_calculator.config import AppSettings
 from soil_tiller_calculator.gui import MainWindow
 
@@ -9,7 +11,11 @@ from soil_tiller_calculator.gui import MainWindow
 def test_application_window_starts_and_closes(monkeypatch) -> None:
     monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
 
-    root = tk.Tk()
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk runtime is not available: {exc}")
+
     root.withdraw()
     try:
         app = MainWindow(root, AppSettings())
