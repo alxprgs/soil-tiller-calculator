@@ -1,0 +1,24 @@
+Architectures: amd64
+Codename: stable
+Components: main
+Date: Fri, 24 Apr 2026 22:38:27 +0000
+Description: Soil Tiller Calculator APT repository
+Label: soil-tiller-calculator
+Origin: soil-tiller-calculator
+Suite: stable
+MD5Sum:
+ 429971fc70b8b03780017b185715741d              219 Release
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-amd64/Packages
+ 07bdc455591e4df8311d63f81167223f               29 main/binary-amd64/Packages.gz
+SHA1:
+ c7c9ebd53a2f2eee2d603cd6701d10173ce28328              219 Release
+ da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-amd64/Packages
+ b0396eed0c192337a0e8c77a3f866545652e1c00               29 main/binary-amd64/Packages.gz
+SHA256:
+ 977338dc82a59acb8169efe0ff5c5e453753cd39dbc7cce1e84540308d95622d              219 Release
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-amd64/Packages
+ 61d1045a9f385cb3e30c7fc590135d0cfc994cc677c4492b6b871e762ce058f7               29 main/binary-amd64/Packages.gz
+SHA512:
+ 16d92d71aab1dde982e6bcc072a2a75292ee39e45230c65a0df7714637b4afef09106b53032e5c2e7c31de93695d485097022e8b82e2ee74b55bd63e1983bc57              219 Release
+ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-amd64/Packages
+ 347c1b0e4f7a7206158e6fda92db106c737daa00a3c6275d5e1f461443efa2512013b7a7d7f2a2bd44f725ded247db130ef95df5be97f56c6db3b13b91d6ae3a               29 main/binary-amd64/Packages.gz
