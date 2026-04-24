@@ -70,8 +70,8 @@ jobs:
           Description: Desktop calculator for soil tiller energy parameters.
           EOF
 
-          dpkg-deb --build "$package_root" "dist/SoilTillerCalculator-linux-x86_64.deb"
-          dpkg-deb --field "dist/SoilTillerCalculator-linux-x86_64.deb" Package Version Architecture
+          dpkg-deb --build "$package_root" "dist/soil-tiller-calculator_${version}_amd64.deb"
+          dpkg-deb --field "dist/soil-tiller-calculator_${version}_amd64.deb" Package Version Architecture
 
       - name: Rename Windows executable
         if: runner.os == 'Windows'
@@ -89,7 +89,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: soil-tiller-calculator-deb
-          path: dist/SoilTillerCalculator-linux-x86_64.deb
+          path: dist/*.deb
           if-no-files-found: error
 
       - name: Attach executable to GitHub Release
@@ -97,6 +97,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/${{ matrix.artifact-name }}*
+
+      - name: Attach Debian package to GitHub Release
+        if: github.event_name == 'release' && runner.os == 'Linux'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.deb
 
   publish-apt-repository:
     name: Publish APT repository
