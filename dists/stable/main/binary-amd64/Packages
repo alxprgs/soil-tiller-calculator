@@ -1,0 +1,13 @@
+Package: soil-tiller-calculator
+Version: 0.2.2
+Architecture: amd64
+Maintainer: soil-tiller-calculator contributors
+Filename: pool/main/s/soil-tiller-calculator/soil-tiller-calculator_0.2.2_amd64.deb
+Size: 59509008
+MD5sum: b7480a70b8de868cb8699760fe7fc43b
+SHA1: 25a09d7d9a5e682b624464bdcf86b70603e7ad0d
+SHA256: 25518525e9e652a5060d4e6395c0cb92de5d9d9814229798fa5052649f91c860
+Section: utils
+Priority: optional
+Description: Desktop calculator for soil tiller energy parameters.
+
