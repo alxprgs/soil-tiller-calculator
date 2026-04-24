@@ -51,11 +51,34 @@ sudo apt update
 sudo apt install soil-tiller-calculator
 ```
 
+Если `apt` сообщает `Unable to locate package soil-tiller-calculator`, обновите
+индексы репозиториев принудительно:
+
+```bash
+sudo apt clean
+sudo rm -rf /var/lib/apt/lists/*alxprgs.github.io*
+sudo apt update
+sudo apt install soil-tiller-calculator
+```
+
+Если в системе не работает IPv6, можно заставить `apt` использовать IPv4:
+
+```bash
+sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null <<'EOF'
+Acquire::ForceIPv4 "true";
+EOF
+sudo apt update
+```
+
 После установки приложение доступно из любой директории:
 
 ```bash
 soil-tiller-calculator
 ```
+
+Для запуска графического интерфейса нужен рабочий дисплей. На обычной Ubuntu
+Desktop приложение откроется как обычное окно; в WSL может понадобиться WSLg
+или другой X-сервер.
 
 ### Из исходников
 
