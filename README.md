@@ -30,6 +30,9 @@
 Подключите ключ репозитория:
 
 ```bash
+sudo apt update
+sudo apt install curl gnupg
+
 curl -fsSL https://alxprgs.github.io/soil-tiller-calculator/soil-tiller-calculator-archive-keyring.asc \
   | sudo gpg --dearmor -o /usr/share/keyrings/soil-tiller-calculator-archive-keyring.gpg
 ```

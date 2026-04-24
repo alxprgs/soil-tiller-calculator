@@ -71,6 +71,7 @@ jobs:
           EOF
 
           dpkg-deb --build "$package_root" "dist/SoilTillerCalculator-linux-x86_64.deb"
+          dpkg-deb --field "dist/SoilTillerCalculator-linux-x86_64.deb" Package Version Architecture
 
       - name: Rename Windows executable
         if: runner.os == 'Windows'
@@ -81,6 +82,14 @@ jobs:
         with:
           name: ${{ matrix.artifact-name }}
           path: dist/${{ matrix.artifact-name }}*
+          if-no-files-found: error
+
+      - name: Upload Debian package artifact
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: soil-tiller-calculator-deb
+          path: dist/SoilTillerCalculator-linux-x86_64.deb
           if-no-files-found: error
 
       - name: Attach executable to GitHub Release
@@ -108,7 +117,7 @@ jobs:
       - name: Download Debian package
         uses: actions/download-artifact@v4
         with:
-          name: SoilTillerCalculator-linux-x86_64
+          name: soil-tiller-calculator-deb
           path: apt-incoming
 
       - name: Install APT repository tools
@@ -137,6 +146,7 @@ jobs:
 
           mkdir -p "$RUNNER_TEMP/apt-package"
           cp apt-incoming/*.deb "$RUNNER_TEMP/apt-package/"
+          dpkg-deb --field "$RUNNER_TEMP"/apt-package/*.deb Package Version Architecture
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -161,7 +171,8 @@ jobs:
           cp "$RUNNER_TEMP"/apt-package/*.deb pool/main/s/soil-tiller-calculator/
 
           mkdir -p dists/stable/main/binary-amd64
-          dpkg-scanpackages --arch amd64 pool > dists/stable/main/binary-amd64/Packages
+          dpkg-scanpackages --arch amd64 pool /dev/null > dists/stable/main/binary-amd64/Packages
+          grep -q '^Package: soil-tiller-calculator$' dists/stable/main/binary-amd64/Packages
           gzip -kf dists/stable/main/binary-amd64/Packages
 
           cat > apt-ftparchive.conf <<EOF
