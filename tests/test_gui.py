@@ -7,14 +7,19 @@ import pytest
 
 from soil_tiller_calculator.calculations import OptimizationResult
 from soil_tiller_calculator.config import AppSettings
+from soil_tiller_calculator.version import __version__
 from soil_tiller_calculator.gui import (
+    AboutWindow,
+    LicenseWindow,
     MainWindow,
     ToolManager,
+    is_newer_version,
     validate_depth,
     validate_depth_limits,
     validate_speed,
     validate_speed_limits,
     validate_speed_step,
+    version_tuple,
 )
 
 
@@ -66,6 +71,13 @@ def test_validate_speed_step_requires_positive_value() -> None:
     assert validate_speed_step("bad") == (0.5, True)
 
 
+def test_version_comparison_accepts_github_release_tags() -> None:
+    assert version_tuple("v1.2.3") == (1, 2, 3)
+    assert version_tuple("0.2") == (0, 2, 0)
+    assert is_newer_version("v0.2.4", "0.2.3")
+    assert not is_newer_version("v0.2.3", "0.2.3")
+
+
 def test_main_window_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     try:
         root = tk.Tk()
@@ -83,6 +95,9 @@ def test_main_window_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     menu = app.main_menu
     assert menu is not None
     assert app.menu_labels == ("Файл", "Инструменты", "Настройки")
+    assert any(label == "Версия" and value == __version__ for label, value in app.about_details())
+    assert any(label == "Лицензия" and value == "MIT" for label, value in app.about_details())
+    assert all(isinstance(label, str) and isinstance(value, str) for label, value in app.about_details())
     assert not hasattr(app, "tools_button")
     assert not hasattr(app, "import_button")
     assert not hasattr(app, "export_button")
@@ -113,6 +128,74 @@ def test_main_window_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     app._apply_responsive_layout(800)
     assert app.parameters.grid_info()["row"] == 0
     assert app.graphs.grid_info()["row"] == 1
+    root.destroy()
+
+
+def test_about_window_adapts_to_window_width(monkeypatch: pytest.MonkeyPatch) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display is not available: {exc}")
+
+    monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
+    monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
+    root.withdraw()
+    app = MainWindow(root, AppSettings())
+    about = AboutWindow(app, root, check_updates=False)
+    about.window.withdraw()
+    assert about.window.winfo_width() <= 560
+    assert about.update_var.get()
+
+    about._apply_responsive_layout(560)
+    first_label, first_value = about.rows[0]
+    assert first_label.grid_info()["row"] == first_value.grid_info()["row"]
+    assert first_value.grid_info()["column"] == 1
+
+    about._apply_responsive_layout(360)
+    assert first_value.grid_info()["row"] == first_label.grid_info()["row"] + 1
+    assert first_value.grid_info()["columnspan"] == 2
+
+    about.window.destroy()
+    root.destroy()
+
+
+def test_about_window_reports_update_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display is not available: {exc}")
+
+    monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
+    monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("soil_tiller_calculator.gui.fetch_latest_release", lambda: ("v99.0.0", "https://example.test/release"))
+    root.withdraw()
+    app = MainWindow(root, AppSettings())
+    about = AboutWindow(app, root, check_updates=False)
+    about.window.withdraw()
+
+    about._check_updates_in_background()
+    root.update()
+
+    assert "99.0.0" in about.update_var.get()
+    assert about.update_url == "https://example.test/release"
+    about.window.destroy()
+    root.destroy()
+
+
+def test_license_window_reads_mit_license(monkeypatch: pytest.MonkeyPatch) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display is not available: {exc}")
+
+    monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
+    root.withdraw()
+    app = MainWindow(root, AppSettings())
+    license_window = LicenseWindow(app.localizer, root)
+    license_window.window.withdraw()
+
+    assert "MIT License" in license_window.text.get("1.0", "end")
+    license_window.window.destroy()
     root.destroy()
 
 

@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import json
+import re
+import sys
+import threading
 import time
 import tkinter as tk
+import urllib.error
+import urllib.request
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
@@ -26,10 +32,13 @@ from soil_tiller_calculator.config import (
 )
 from soil_tiller_calculator.localization import Localizer
 from soil_tiller_calculator.models import BUILTIN_TOOL_IDS, BUILTIN_TOOLS, ToolProfile, ReferencePoint, SpeedRange
+from soil_tiller_calculator.version import __version__
 
 RESIZE_SETTLE_MS = 350
 LAYOUT_SETTLE_MS = 180
 TOOL_MANAGER_BREAKPOINT = 680
+ABOUT_BREAKPOINT = 520
+GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/alxprgs/soil-tiller-calculator/releases/latest"
 
 
 def validate_depth(value: str, min_cm: float = 5.0, max_cm: float = 20.0, fallback: float | None = None) -> tuple[float, bool]:
@@ -113,6 +122,41 @@ def validate_speed_step(value: str) -> tuple[float, bool]:
     if step > 0:
         return step, False
     return 0.5, True
+
+
+def version_tuple(version: str) -> tuple[int, int, int]:
+    """Возвращает числовую часть версии для сравнения тегов GitHub."""
+    raw_parts = version.strip().lstrip("vV").split(".")
+    parts: list[int] = []
+    for raw_part in raw_parts[:3]:
+        match = re.match(r"(\d+)", raw_part)
+        parts.append(int(match.group(1)) if match else 0)
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts)
+
+
+def is_newer_version(latest: str, current: str) -> bool:
+    """Проверяет, новее ли версия релиза текущей версии приложения."""
+    return version_tuple(latest) > version_tuple(current)
+
+
+def fetch_latest_release(timeout: float = 5.0) -> tuple[str, str]:
+    """Загружает тег и ссылку последнего GitHub-релиза."""
+    request = urllib.request.Request(
+        GITHUB_LATEST_RELEASE_URL,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "soil-tiller-calculator",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    tag = str(payload.get("tag_name") or "")
+    url = str(payload.get("html_url") or "https://github.com/alxprgs/soil-tiller-calculator/releases")
+    if not tag:
+        raise ValueError("GitHub release tag is empty")
+    return tag, url
 
 
 class MainWindow:
@@ -334,6 +378,31 @@ class MainWindow:
         self.settings.speed_step_kmh = speed_step
         save_settings(self.settings)
         self.calculate()
+
+    def open_about(self) -> None:
+        """Открывает адаптивное окно со сведениями о приложении."""
+        AboutWindow(self, self.root)
+
+    def about_details(self) -> list[tuple[str, str]]:
+        """Возвращает строки для окна «О приложении»."""
+        return [
+            (self.localizer("about.version"), __version__),
+            (self.localizer("about.updates"), self.localizer("about.updates_checking")),
+            (self.localizer("about.launch"), self._launch_description()),
+            (self.localizer("about.license"), "MIT"),
+            (self.localizer("about.author"), "alxprgs"),
+        ]
+
+    def _launch_description(self) -> str:
+        """Определяет, запущено ли приложение из Python или собранного исполняемого файла."""
+        executable = Path(sys.executable).name
+        if getattr(sys, "frozen", False):
+            return self.localizer("about.launch_frozen", executable=executable)
+        return self.localizer(
+            "about.launch_python",
+            version=f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+            executable=executable,
+        )
 
     def calculate(self) -> None:
         """Выполняет полный расчёт по текущим данным интерфейса.
@@ -643,6 +712,8 @@ class MainWindow:
         file_menu.add_command(label=self.localizer("config_change_location"), command=self.choose_config_location)
         file_menu.add_command(label=self.localizer("config_use_default_location"), command=self.use_default_config_location)
         file_menu.add_separator()
+        file_menu.add_command(label=self.localizer("about.title"), command=self.open_about)
+        file_menu.add_separator()
         file_menu.add_command(label=self.localizer("exit"), command=self.root.destroy)
 
         tools_menu = tk.Menu(menu, tearoff=False)
@@ -830,6 +901,160 @@ class MainWindow:
         if invalid:
             return 5.0, 12.0
         return speed_min, speed_max
+
+
+class AboutWindow:
+    """Адаптивное окно со сведениями о приложении."""
+
+    def __init__(self, app: MainWindow, master: tk.Tk, check_updates: bool = True) -> None:
+        self.app = app
+        self.localizer = app.localizer
+        self.window = tk.Toplevel(master)
+        self.window.title(self.localizer("about.title"))
+        self.window.geometry("560x285")
+        self.window.minsize(320, 235)
+        self.window.transient(master)
+
+        self._layout_mode: str | None = None
+        self.rows: list[tuple[ttk.Label, tk.Widget]] = []
+        self.update_var = tk.StringVar(value=self.localizer("about.updates_checking"))
+        self.update_url: str | None = None
+
+        self.container = ttk.Frame(self.window, padding=(16, 14))
+        self.container.columnconfigure(0, weight=1)
+        self.container.columnconfigure(1, weight=2)
+
+        self.title_label = ttk.Label(self.container, text=self.localizer("app.title"), font=("TkDefaultFont", 12, "bold"))
+        self.subtitle_label = ttk.Label(self.container, text=self.localizer("about.subtitle"), wraplength=480)
+
+        for label_text, value_text in app.about_details():
+            label = ttk.Label(self.container, text=label_text)
+            if label_text == self.localizer("about.updates"):
+                value = ttk.Label(self.container, textvariable=self.update_var, wraplength=320, justify="left")
+            elif label_text == self.localizer("about.license"):
+                value = ttk.Button(self.container, text=value_text, command=self.open_license)
+            else:
+                value = ttk.Label(self.container, text=value_text, wraplength=320, justify="left")
+            self.rows.append((label, value))
+
+        self.close_button = ttk.Button(self.container, text=self.localizer("tools.close"), command=self.window.destroy)
+
+        self._apply_responsive_layout(560)
+        self.window.bind("<Configure>", self._on_configure)
+        self.window.focus_set()
+        if check_updates:
+            self.check_updates()
+
+    def check_updates(self) -> None:
+        thread = threading.Thread(target=self._check_updates_in_background, daemon=True)
+        thread.start()
+
+    def _check_updates_in_background(self) -> None:
+        try:
+            latest_tag, release_url = fetch_latest_release()
+        except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError) as exc:
+            self._schedule_update_status(self.localizer("about.updates_error", message=str(exc)), None)
+            return
+
+        if is_newer_version(latest_tag, __version__):
+            text = self.localizer("about.updates_available", version=latest_tag)
+            self._schedule_update_status(text, release_url)
+        else:
+            self._schedule_update_status(self.localizer("about.updates_current"), release_url)
+
+    def _schedule_update_status(self, text: str, url: str | None) -> None:
+        try:
+            self.window.after(0, lambda: self._set_update_status(text, url))
+        except tk.TclError:
+            return
+
+    def _set_update_status(self, text: str, url: str | None) -> None:
+        self.update_var.set(text)
+        self.update_url = url
+
+    def open_license(self) -> None:
+        LicenseWindow(self.localizer, self.window)
+
+    def _on_configure(self, event: tk.Event) -> None:
+        if event.widget is self.window:
+            self._apply_responsive_layout(event.width)
+
+    def _apply_responsive_layout(self, width: int) -> None:
+        mode = "wide" if width >= ABOUT_BREAKPOINT else "narrow"
+        if mode == self._layout_mode:
+            self._update_wrap(width)
+            return
+        self._layout_mode = mode
+
+        self.container.grid_forget()
+        for child in self.container.winfo_children():
+            child.grid_forget()
+
+        self.window.columnconfigure(0, weight=1)
+        self.window.rowconfigure(0, weight=1)
+        self.container.grid(row=0, column=0, sticky="nsew")
+        self.title_label.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        self.subtitle_label.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+
+        row = 2
+        if mode == "wide":
+            self.container.columnconfigure(0, weight=0)
+            self.container.columnconfigure(1, weight=1)
+            for label, value in self.rows:
+                label.grid(row=row, column=0, sticky="nw", padx=(0, 14), pady=3)
+                value.grid(row=row, column=1, sticky="ew", pady=3)
+                row += 1
+        else:
+            self.container.columnconfigure(0, weight=1)
+            self.container.columnconfigure(1, weight=0)
+            for label, value in self.rows:
+                label.grid(row=row, column=0, columnspan=2, sticky="w", pady=(5, 1))
+                value.grid(row=row + 1, column=0, columnspan=2, sticky="ew", pady=(0, 2))
+                row += 2
+
+        self.close_button.grid(row=row, column=0, columnspan=2, sticky="e", pady=(10, 0))
+        self._update_wrap(width)
+
+    def _update_wrap(self, width: int) -> None:
+        wrap = max(240, min(520, width - 48))
+        self.subtitle_label.configure(wraplength=wrap)
+        value_wrap = max(220, min(360, width - 190 if self._layout_mode == "wide" else width - 48))
+        for _label, value in self.rows:
+            if isinstance(value, ttk.Label):
+                value.configure(wraplength=value_wrap)
+
+
+class LicenseWindow:
+    """Окно с текстом MIT-лицензии."""
+
+    def __init__(self, localizer: Localizer, master: tk.Toplevel) -> None:
+        self.localizer = localizer
+        self.window = tk.Toplevel(master)
+        self.window.title(self.localizer("about.license_title"))
+        self.window.geometry("640x420")
+        self.window.minsize(360, 260)
+        self.window.transient(master)
+        self.window.columnconfigure(0, weight=1)
+        self.window.rowconfigure(0, weight=1)
+
+        self.text = tk.Text(self.window, wrap="word", height=16)
+        self.scrollbar = ttk.Scrollbar(self.window, orient="vertical", command=self.text.yview)
+        self.text.configure(yscrollcommand=self.scrollbar.set)
+        self.text.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
+        self.scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, 10), pady=10)
+        self.close_button = ttk.Button(self.window, text=self.localizer("tools.close"), command=self.window.destroy)
+        self.close_button.grid(row=1, column=0, columnspan=2, sticky="e", padx=10, pady=(0, 10))
+
+        self.text.insert("1.0", self._license_text())
+        self.text.configure(state="disabled")
+        self.window.focus_set()
+
+    def _license_text(self) -> str:
+        license_path = Path(__file__).resolve().parents[2] / "LICENSE"
+        try:
+            return license_path.read_text(encoding="utf-8")
+        except OSError:
+            return self.localizer("about.license_unavailable")
 
 
 class ToolManager:
