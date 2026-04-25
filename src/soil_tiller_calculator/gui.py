@@ -8,6 +8,7 @@ import time
 import tkinter as tk
 import urllib.error
 import urllib.request
+from importlib import resources
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
@@ -1082,9 +1083,8 @@ class LicenseWindow:
         self.window.focus_set()
 
     def _license_text(self) -> str:
-        license_path = Path(__file__).resolve().parents[2] / "LICENSE"
         try:
-            return license_path.read_text(encoding="utf-8")
+            return resources.files("soil_tiller_calculator").joinpath("LICENSE.txt").read_text(encoding="utf-8")
         except OSError:
             return self.localizer("about.license_unavailable")
 
