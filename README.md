@@ -1,6 +1,6 @@
 # Soil Tiller Calculator
 
-**Версия:** 0.2.0
+**Версия:** 0.2.4
 
 Приложение для автоматизированного расчёта параметров почвообрабатывающих лап.
 Программа помогает рассчитать силу тяги, удельное сопротивление, тяговую
@@ -24,6 +24,21 @@
 - адаптивный интерфейс и графики.
 
 ## Установка
+
+### Windows через Chocolatey
+
+Установите приложение из Chocolatey Community Repository:
+
+```powershell
+choco install soil-tiller-calculator
+```
+
+После установки приложение доступно из любой директории:
+
+```powershell
+soil-tiller-calculator
+stc
+```
 
 ### Ubuntu через APT-репозиторий
 
@@ -100,6 +115,12 @@ sudo apt install python3-tk
 
 ```powershell
 soil-tiller-calculator
+```
+
+Для установок через Chocolatey и APT также доступна короткая команда:
+
+```powershell
+stc
 ```
 
 Также можно запустить модуль напрямую:

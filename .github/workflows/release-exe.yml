@@ -112,6 +112,79 @@ jobs:
         with:
           files: dist/*.deb
 
+  publish-chocolatey:
+    name: Publish Chocolatey package
+    needs: build-executable
+    if: github.event_name == 'release'
+    runs-on: windows-latest
+
+    env:
+      CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Download Windows executable
+        uses: actions/download-artifact@v4
+        with:
+          name: SoilTillerCalculator-windows
+          path: chocolatey-incoming
+
+      - name: Prepare Chocolatey package inputs
+        id: package-inputs
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CHOCOLATEY_API_KEY)) {
+            throw "CHOCOLATEY_API_KEY secret is required to publish the Chocolatey package."
+          }
+
+          $versionFile = Get-Content -LiteralPath "src\soil_tiller_calculator\version.py" -Raw -Encoding UTF8
+          if ($versionFile -notmatch '__version__\s*=\s*"([^"]+)"') {
+            throw "Could not read __version__ from src\soil_tiller_calculator\version.py."
+          }
+
+          $version = $Matches[1]
+          $releaseTag = "${{ github.event.release.tag_name }}"
+          $exePath = Get-ChildItem -LiteralPath "chocolatey-incoming" -Filter "SoilTillerCalculator-windows.exe" -File | Select-Object -First 1
+          if ($null -eq $exePath) {
+            throw "SoilTillerCalculator-windows.exe artifact was not downloaded."
+          }
+
+          $checksum64 = (Get-FileHash -LiteralPath $exePath.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "release_tag=$releaseTag" >> $env:GITHUB_OUTPUT
+          "checksum64=$checksum64" >> $env:GITHUB_OUTPUT
+
+      - name: Build Chocolatey package
+        shell: pwsh
+        run: |
+          .\scripts\build-chocolatey-package.ps1 `
+            -Version "${{ steps.package-inputs.outputs.version }}" `
+            -ReleaseTag "${{ steps.package-inputs.outputs.release_tag }}" `
+            -Checksum64 "${{ steps.package-inputs.outputs.checksum64 }}" `
+            -OutputDirectory "dist\chocolatey"
+
+      - name: Upload Chocolatey package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: soil-tiller-calculator-chocolatey
+          path: dist/chocolatey/*.nupkg
+          if-no-files-found: error
+
+      - name: Push Chocolatey package
+        shell: pwsh
+        run: |
+          $packagePath = Get-ChildItem -LiteralPath "dist\chocolatey" -Filter "*.nupkg" -File | Select-Object -First 1
+          if ($null -eq $packagePath) {
+            throw "Chocolatey package was not created."
+          }
+
+          choco push $packagePath.FullName --source "https://push.chocolatey.org/" --api-key $env:CHOCOLATEY_API_KEY
+
   publish-apt-repository:
     name: Publish APT repository
     needs: build-executable

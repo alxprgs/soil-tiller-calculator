@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>soil-tiller-calculator</id>
+    <version>$version$</version>
+    <title>Soil Tiller Calculator</title>
+    <authors>soil-tiller-calculator contributors</authors>
+    <owners>alxprgs</owners>
+    <licenseUrl>https://github.com/alxprgs/soil-tiller-calculator/blob/main/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/alxprgs/soil-tiller-calculator</projectUrl>
+    <packageSourceUrl>https://github.com/alxprgs/soil-tiller-calculator</packageSourceUrl>
+    <docsUrl>https://github.com/alxprgs/soil-tiller-calculator#readme</docsUrl>
+    <bugTrackerUrl>https://github.com/alxprgs/soil-tiller-calculator/issues</bugTrackerUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <summary>Desktop calculator for soil tiller energy parameters.</summary>
+    <description>
+Soil Tiller Calculator is a desktop application for calculating soil tiller energy parameters, including draft force, specific resistance, traction power, and approximate fuel consumption.
+    </description>
+    <releaseNotes>https://github.com/alxprgs/soil-tiller-calculator/releases</releaseNotes>
+    <tags>soil tiller calculator agriculture desktop gui windows</tags>
+  </metadata>
+</package>
