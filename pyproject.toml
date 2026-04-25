@@ -22,6 +22,7 @@ test = [
 
 [project.scripts]
 soil-tiller-calculator = "soil_tiller_calculator.app:main"
+stc = "soil_tiller_calculator.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

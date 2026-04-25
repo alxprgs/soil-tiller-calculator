@@ -66,6 +66,7 @@ jobs:
           cp dist/SoilTillerCalculator-linux-x86_64 "$package_root/opt/soil-tiller-calculator/soil-tiller-calculator"
           chmod 755 "$package_root/opt/soil-tiller-calculator/soil-tiller-calculator"
           ln -s /opt/soil-tiller-calculator/soil-tiller-calculator "$package_root/usr/bin/soil-tiller-calculator"
+          ln -s /opt/soil-tiller-calculator/soil-tiller-calculator "$package_root/usr/bin/stc"
 
           cat > "$package_root/DEBIAN/control" <<EOF
           Package: soil-tiller-calculator
