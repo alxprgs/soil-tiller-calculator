@@ -43,6 +43,7 @@
   "about.updates_current": "Установлена актуальная версия",
   "about.updates_available": "Доступна версия {version}",
   "about.updates_error": "Не удалось проверить: {message}",
+  "about.timestamp": "Таймстамп",
   "about.launch": "Запущено через",
   "about.launch_python": "Python {version} ({executable})",
   "about.launch_frozen": "Собранный исполняемый файл ({executable})",

@@ -43,6 +43,7 @@
   "about.updates_current": "You are running the latest version",
   "about.updates_available": "Version {version} is available",
   "about.updates_error": "Could not check: {message}",
+  "about.timestamp": "Timestamp",
   "about.launch": "Launched through",
   "about.launch_python": "Python {version} ({executable})",
   "about.launch_frozen": "Bundled executable ({executable})",

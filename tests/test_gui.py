@@ -145,6 +145,8 @@ def test_about_window_adapts_to_window_width(monkeypatch: pytest.MonkeyPatch) ->
     about.window.withdraw()
     assert about.window.winfo_width() <= 560
     assert about.update_var.get()
+    assert about.timestamp_var.get()
+    assert about._timestamp_job is not None
 
     about._apply_responsive_layout(560)
     first_label, first_value = about.rows[0]
@@ -155,7 +157,10 @@ def test_about_window_adapts_to_window_width(monkeypatch: pytest.MonkeyPatch) ->
     assert first_value.grid_info()["row"] == first_label.grid_info()["row"] + 1
     assert first_value.grid_info()["columnspan"] == 2
 
-    about.window.destroy()
+    timestamp_job = about._timestamp_job
+    about.destroy()
+    assert timestamp_job is not None
+    assert about._timestamp_job is None
     root.destroy()
 
 
@@ -178,7 +183,7 @@ def test_about_window_reports_update_status(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert "99.0.0" in about.update_var.get()
     assert about.update_url == "https://example.test/release"
-    about.window.destroy()
+    about.destroy()
     root.destroy()
 
 

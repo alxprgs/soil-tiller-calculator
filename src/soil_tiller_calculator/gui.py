@@ -388,6 +388,7 @@ class MainWindow:
         return [
             (self.localizer("about.version"), __version__),
             (self.localizer("about.updates"), self.localizer("about.updates_checking")),
+            (self.localizer("about.timestamp"), ""),
             (self.localizer("about.launch"), self._launch_description()),
             (self.localizer("about.license"), "MIT"),
             (self.localizer("about.author"), "alxprgs"),
@@ -911,13 +912,15 @@ class AboutWindow:
         self.localizer = app.localizer
         self.window = tk.Toplevel(master)
         self.window.title(self.localizer("about.title"))
-        self.window.geometry("560x285")
-        self.window.minsize(320, 235)
+        self.window.geometry("560x315")
+        self.window.minsize(320, 260)
         self.window.transient(master)
 
         self._layout_mode: str | None = None
+        self._timestamp_job: str | None = None
         self.rows: list[tuple[ttk.Label, tk.Widget]] = []
         self.update_var = tk.StringVar(value=self.localizer("about.updates_checking"))
+        self.timestamp_var = tk.StringVar(value=self._timestamp_text())
         self.update_url: str | None = None
 
         self.container = ttk.Frame(self.window, padding=(16, 14))
@@ -931,19 +934,48 @@ class AboutWindow:
             label = ttk.Label(self.container, text=label_text)
             if label_text == self.localizer("about.updates"):
                 value = ttk.Label(self.container, textvariable=self.update_var, wraplength=320, justify="left")
+            elif label_text == self.localizer("about.timestamp"):
+                value = ttk.Label(self.container, textvariable=self.timestamp_var, wraplength=320, justify="left")
             elif label_text == self.localizer("about.license"):
                 value = ttk.Button(self.container, text=value_text, command=self.open_license)
             else:
                 value = ttk.Label(self.container, text=value_text, wraplength=320, justify="left")
             self.rows.append((label, value))
 
-        self.close_button = ttk.Button(self.container, text=self.localizer("tools.close"), command=self.window.destroy)
+        self.close_button = ttk.Button(self.container, text=self.localizer("tools.close"), command=self.destroy)
 
         self._apply_responsive_layout(560)
+        self._center_on_screen()
+        self._schedule_timestamp_refresh()
+        self.window.protocol("WM_DELETE_WINDOW", self.destroy)
         self.window.bind("<Configure>", self._on_configure)
         self.window.focus_set()
         if check_updates:
             self.check_updates()
+
+    def destroy(self) -> None:
+        if self._timestamp_job is not None:
+            try:
+                self.window.after_cancel(self._timestamp_job)
+            except tk.TclError:
+                pass
+            self._timestamp_job = None
+        self.window.destroy()
+
+    def _center_on_screen(self) -> None:
+        self.window.update_idletasks()
+        width = self.window.winfo_width()
+        height = self.window.winfo_height()
+        x = max(0, (self.window.winfo_screenwidth() - width) // 2)
+        y = max(0, (self.window.winfo_screenheight() - height) // 2)
+        self.window.geometry(f"{width}x{height}+{x}+{y}")
+
+    def _timestamp_text(self) -> str:
+        return time.strftime("%Y-%m-%d %H:%M:%S")
+
+    def _schedule_timestamp_refresh(self) -> None:
+        self.timestamp_var.set(self._timestamp_text())
+        self._timestamp_job = self.window.after(1000, self._schedule_timestamp_refresh)
 
     def check_updates(self) -> None:
         thread = threading.Thread(target=self._check_updates_in_background, daemon=True)
