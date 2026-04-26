@@ -36,6 +36,8 @@
   "config_use_default_location": "Use default config location",
   "config_location_changed": "Config location changed.",
   "config_location_reset": "Default config location is active.",
+  "config_recovered_warning": "The saved configuration could not be loaded, so default settings were restored. Backup: {backup}. Error: {error}",
+  "config_recovered_no_backup": "backup was not created",
   "changelog.title": "Changelog",
   "changelog.current_build": "Current build",
   "changelog.unavailable": "Changelog is unavailable.",

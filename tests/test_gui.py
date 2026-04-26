@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tkinter as tk
 from pathlib import Path
 
@@ -71,11 +72,15 @@ def test_validate_speed_accepts_custom_limits_and_fallback() -> None:
 def test_validate_speed_limits_accepts_valid_range() -> None:
     assert validate_speed_limits("3", "15") == (3.0, 15.0, False)
     assert validate_speed_limits("15", "3") == (5.0, 12.0, True)
+    assert validate_speed_limits("0", "15") == (5.0, 12.0, True)
+    assert validate_speed_limits("-1", "15") == (5.0, 12.0, True)
 
 
 def test_validate_depth_limits_accepts_valid_range() -> None:
     assert validate_depth_limits("4", "30") == (4.0, 30.0, False)
     assert validate_depth_limits("30", "4") == (5.0, 20.0, True)
+    assert validate_depth_limits("0", "30") == (5.0, 20.0, True)
+    assert validate_depth_limits("-1", "30") == (5.0, 20.0, True)
 
 
 def test_validate_speed_step_requires_positive_value() -> None:
@@ -87,7 +92,7 @@ def test_validate_speed_step_requires_positive_value() -> None:
 def test_version_comparison_accepts_github_release_tags() -> None:
     assert version_tuple("v1.2.3") == (1, 2, 3)
     assert version_tuple("0.2") == (0, 2, 0)
-    assert is_newer_version("v0.2.4", "0.2.3")
+    assert is_newer_version("v1.0.0", "0.2.3")
     assert not is_newer_version("v0.2.3", "0.2.3")
 
 
@@ -108,7 +113,7 @@ def test_changelog_resource_contains_release_history() -> None:
     text = format_changelog(entries, lambda key: "Current build" if key == "changelog.current_build" else key)
 
     assert "Current build" in text
-    for version in ("v0.2.0", "v0.2.1", "v0.2.2", "v0.2.3", "v0.2.4"):
+    for version in ("v1.0.0", "v0.2.0", "v0.2.1", "v0.2.2", "v0.2.3", "v0.2.4"):
         assert version in text
 
 
@@ -347,6 +352,37 @@ def test_startup_instruction_is_scheduled_by_setting(monkeypatch: pytest.MonkeyP
     root.destroy()
 
 
+def test_main_window_recovers_broken_startup_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display is not available: {exc}")
+
+    config_dir = Path.cwd() / ".cache" / "config-recovery-test"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    for item in config_dir.glob("config*"):
+        item.unlink()
+    config_path = config_dir / "config.json"
+    config_path.write_text("{bad", encoding="utf-8")
+    callbacks: list[object] = []
+    monkeypatch.setattr("soil_tiller_calculator.gui.active_config_path", lambda: config_path)
+    monkeypatch.setattr("soil_tiller_calculator.config.active_config_path", lambda: config_path)
+    monkeypatch.setattr(root, "after_idle", lambda callback: callbacks.append(callback))
+    monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
+    root.withdraw()
+
+    app = MainWindow(root)
+
+    backups = list(config_dir.glob("config.broken-*.json"))
+    assert backups
+    assert backups[0].read_text(encoding="utf-8") == "{bad"
+    assert json.loads(config_path.read_text(encoding="utf-8"))["schema_version"] == 1
+    assert app._config_recovery_error is not None
+    assert app._config_recovery_backup in backups
+    assert callbacks
+    root.destroy()
+
+
 def test_about_window_adapts_to_window_width(monkeypatch: pytest.MonkeyPatch) -> None:
     try:
         root = tk.Tk()
@@ -418,7 +454,7 @@ def test_changelog_window_shows_bundled_history(monkeypatch: pytest.MonkeyPatch)
 
     text = changelog.text.get("1.0", "end")
     assert "Current build" in text
-    assert "v0.2.4" in text
+    assert "v1.0.0" in text
     assert "Chocolatey" in text
 
     changelog.window.destroy()
@@ -604,6 +640,29 @@ def test_invalid_custom_depth_limits_reset_to_default(monkeypatch: pytest.Monkey
     assert app._depth_limits() == (5.0, 20.0)
     assert app.settings.custom_depth_limits_enabled is False
     assert app.custom_depth_limits_var.get() is False
+    root.destroy()
+
+
+def test_negative_custom_depth_limits_reset_and_do_not_crash(monkeypatch: pytest.MonkeyPatch) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display is not available: {exc}")
+
+    monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
+    monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
+    root.withdraw()
+    app = MainWindow(root, gui_settings())
+    app.custom_depth_limits_var.set(True)
+    app.depth_min_var.set("-1")
+    app.depth_max_var.set("10")
+    app.depth_var.set("0")
+
+    app.calculate()
+
+    assert app.settings.custom_depth_limits_enabled is False
+    assert app.custom_depth_limits_var.get() is False
+    assert app.depth_var.get() == "10.0"
     root.destroy()
 
 

@@ -36,6 +36,8 @@
   "config_use_default_location": "Использовать стандартное место",
   "config_location_changed": "Место хранения конфига изменено.",
   "config_location_reset": "Используется стандартное место хранения конфига.",
+  "config_recovered_warning": "Сохранённый конфиг не удалось загрузить, поэтому восстановлены настройки по умолчанию. Резервная копия: {backup}. Ошибка: {error}",
+  "config_recovered_no_backup": "резервная копия не создана",
   "changelog.title": "История изменений",
   "changelog.current_build": "Текущая сборка",
   "changelog.unavailable": "История изменений недоступна.",

@@ -1,16 +1,24 @@
 [
   {
-    "version": "Current build",
+    "version": "v1.0.0",
     "date": "2026-04-26",
     "current": true,
     "changes": {
       "en": [
-        "Package the MIT license together with the application so installed builds can always open it.",
-        "Load the license through Python package resources instead of relying on a filesystem-relative path."
+        "Bump the application to v1.0.0.",
+        "Recover safely from a broken startup config by backing it up and restoring default settings.",
+        "Reject zero and negative custom speed or depth limits before calculation.",
+        "Keep speed optimization grids inside the selected range while still including the final boundary.",
+        "Validate custom tool graph colors and line styles before they can break matplotlib rendering.",
+        "Package the MIT license together with the application so installed builds can always open it."
       ],
       "ru": [
-        "MIT-лицензия теперь включается в пакет приложения, поэтому установленная сборка всегда может открыть ее текст.",
-        "Текст лицензии загружается через ресурсы Python-пакета, а не через путь относительно файловой системы."
+        "Версия приложения поднята до v1.0.0.",
+        "Добавлено безопасное восстановление после повреждённого стартового конфига: файл сохраняется в резервную копию, а приложение запускается с настройками по умолчанию.",
+        "Нулевые и отрицательные пользовательские границы скорости или глубины отклоняются до запуска расчёта.",
+        "Сетка скоростей для оптимизации больше не выходит за выбранный диапазон и при этом включает конечную границу.",
+        "Цвета и стили линий пользовательских инструментов проверяются до построения графиков matplotlib.",
+        "MIT-лицензия теперь включается в пакет приложения, поэтому установленная сборка всегда может открыть её текст."
       ]
     }
   },

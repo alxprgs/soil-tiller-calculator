@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Git ref to build, for example v0.2.2 or main.
+        description: Git ref to build, for example v1.0.0 or main.
         required: false
         default: main
 

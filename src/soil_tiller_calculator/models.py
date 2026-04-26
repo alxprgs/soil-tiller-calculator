@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+VALID_LINE_STYLES = frozenset({"-", "--", "-.", ":", "solid", "dashed", "dashdot", "dotted"})
+
 
 class ToolValidationError(ValueError):
     """Ошибка валидации профиля инструмента.
@@ -109,6 +111,10 @@ class ToolProfile:
             raise ToolValidationError("Fuel specific consumption must be greater than zero.")
         if self.fuel_density <= 0:
             raise ToolValidationError("Fuel density must be greater than zero.")
+        if not _is_valid_color(self.color):
+            raise ToolValidationError("Tool color must be a valid matplotlib color.")
+        if self.line_style not in VALID_LINE_STYLES:
+            raise ToolValidationError("Tool line style is not supported.")
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], *, built_in: bool = False) -> "ToolProfile":
@@ -175,6 +181,17 @@ class ToolProfile:
             line_style=self.line_style,
             built_in=False,
         )
+
+
+def _is_valid_color(color: str) -> bool:
+    """Проверяет цвет matplotlib, не делая модель жёстко зависимой от установленного matplotlib."""
+    if not color:
+        return False
+    try:
+        from matplotlib.colors import is_color_like
+    except ModuleNotFoundError:
+        return True
+    return bool(is_color_like(color))
 
 
 KPS_TOOL = ToolProfile(

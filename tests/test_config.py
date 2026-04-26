@@ -45,7 +45,7 @@ def test_settings_roundtrip_json() -> None:
         depth_min_cm=4.0,
         depth_max_cm=30.0,
         speed_step_kmh=0.25,
-        last_seen_changelog_version="0.2.4",
+        last_seen_changelog_version="1.0.0",
         pretty_interface_enabled=True,
         startup_instruction_dismissed=True,
         inline_help_enabled=False,
@@ -60,7 +60,7 @@ def test_settings_roundtrip_json() -> None:
     assert loaded.depth_min_cm == pytest.approx(4.0)
     assert loaded.depth_max_cm == pytest.approx(30.0)
     assert loaded.speed_step_kmh == pytest.approx(0.25)
-    assert loaded.last_seen_changelog_version == "0.2.4"
+    assert loaded.last_seen_changelog_version == "1.0.0"
     assert loaded.pretty_interface_enabled is True
     assert loaded.startup_instruction_dismissed is True
     assert loaded.inline_help_enabled is False
@@ -88,6 +88,17 @@ def test_old_config_without_speed_limit_fields_uses_defaults() -> None:
 def test_config_rejects_wrong_schema_version() -> None:
     with pytest.raises(ConfigError):
         settings_from_dict({"schema_version": 999, "settings": {}, "custom_tools": []})
+
+
+def test_load_settings_rejects_invalid_json() -> None:
+    path = Path.cwd() / ".cache" / "strict-bad-config.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{bad", encoding="utf-8")
+    try:
+        with pytest.raises(ConfigError):
+            load_settings(path)
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def test_config_rejects_non_list_tools() -> None:
@@ -129,6 +140,41 @@ def test_config_rejects_tool_with_too_few_reference_points() -> None:
     }
     with pytest.raises(ValueError):
         settings_from_dict(data)
+
+
+def test_tool_profile_rejects_invalid_graph_style() -> None:
+    with pytest.raises(ValueError):
+        ToolProfile(
+            id="bad-color",
+            name="Bad color",
+            width_m=0.45,
+            base_depth_cm=10,
+            reference_points=(ReferencePoint(6, 300), ReferencePoint(10, 420)),
+            color="not-a-color",
+        )
+    with pytest.raises(ValueError):
+        ToolProfile(
+            id="bad-style",
+            name="Bad style",
+            width_m=0.45,
+            base_depth_cm=10,
+            reference_points=(ReferencePoint(6, 300), ReferencePoint(10, 420)),
+            line_style="bad",
+        )
+
+
+def test_tool_profile_accepts_valid_graph_style() -> None:
+    tool = ToolProfile(
+        id="styled",
+        name="Styled",
+        width_m=0.45,
+        base_depth_cm=10,
+        reference_points=(ReferencePoint(6, 300), ReferencePoint(10, 420)),
+        color="#00aa00",
+        line_style="dashed",
+    )
+    assert tool.color == "#00aa00"
+    assert tool.line_style == "dashed"
 
 
 def test_imported_builtin_id_does_not_overwrite_builtin_tool() -> None:

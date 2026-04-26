@@ -58,6 +58,19 @@ def test_speed_grids_are_inclusive() -> None:
     assert len(plot_speed_grid(step=0.2)) == 36
 
 
+def test_speed_grid_never_exceeds_stop_with_uneven_step() -> None:
+    assert speed_grid(5, 12, 2) == [5.0, 7.0, 9.0, 11.0, 12.0]
+    assert plot_speed_grid(5, 12, 0.3)[-1] == pytest.approx(12.0)
+    assert max(plot_speed_grid(5, 12, 0.3)) == pytest.approx(12.0)
+
+
+def test_speed_grid_rejects_invalid_range_or_step() -> None:
+    with pytest.raises(ValueError):
+        speed_grid(5, 12, 0)
+    with pytest.raises(ValueError):
+        plot_speed_grid(12, 5, 0.2)
+
+
 def test_optimize_speed_for_single_tool() -> None:
     result = optimize_speed(10, ["kps"])
     assert result.speed_kmh == pytest.approx(5.0)
@@ -84,6 +97,13 @@ def test_compare_tools_reports_better_tool_and_delta_against_first() -> None:
     assert result.first_q == pytest.approx(385.65 / 0.33)
     assert result.second_q == pytest.approx(486.95 / 0.40)
     assert result.difference_percent == pytest.approx(abs(result.second_q - result.first_q) / result.first_q * 100)
+
+
+def test_compare_tools_handles_zero_depth_without_division_error() -> None:
+    result = compare_tools(0, 8, "kps", "exp")
+    assert result.first_q == pytest.approx(0.0)
+    assert result.second_q == pytest.approx(0.0)
+    assert result.difference_percent == pytest.approx(0.0)
 
 
 def test_custom_tool_interpolates_across_nearest_segment() -> None:

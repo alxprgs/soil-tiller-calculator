@@ -56,8 +56,7 @@ def speed_grid(start: float = 5.0, stop: float = 12.0, step: float = 0.5) -> lis
     Принимает начальную скорость, конечную скорость и шаг в км/ч.
     Возвращает включительный диапазон, где присутствуют и start, и stop.
     """
-    count = int(round((stop - start) / step))
-    return [round(start + index * step, 10) for index in range(count + 1)]
+    return _inclusive_grid(start, stop, step)
 
 
 def plot_speed_grid(start: float = 5.0, stop: float = 12.0, step: float = 0.2) -> list[float]:
@@ -66,8 +65,7 @@ def plot_speed_grid(start: float = 5.0, stop: float = 12.0, step: float = 0.2) -
     Работает так же, как speed_grid, но по умолчанию использует более
     мелкий шаг, чтобы линии на графиках были плавнее.
     """
-    count = int(round((stop - start) / step))
-    return [round(start + index * step, 10) for index in range(count + 1)]
+    return _inclusive_grid(start, stop, step)
 
 
 def force_at_depth(v: float, H: float, tool_type_or_profile: str | ToolProfile) -> float:
@@ -155,7 +153,10 @@ def compare_tools(H: float, v: float, first: str | ToolProfile, second: str | To
     second_q = specific_resistance(v, H, second_tool)
     better = first_tool if first_q <= second_q else second_tool
     worse = second_tool if better is first_tool else first_tool
-    difference = abs(second_q - first_q) / first_q * 100
+    if first_q <= 0:
+        difference = 0.0 if second_q == first_q else float("inf")
+    else:
+        difference = abs(second_q - first_q) / first_q * 100
     return ComparisonResult(
         better_tool=better,
         worse_tool=worse,
@@ -163,6 +164,25 @@ def compare_tools(H: float, v: float, first: str | ToolProfile, second: str | To
         second_q=second_q,
         difference_percent=difference,
     )
+
+
+def _inclusive_grid(start: float, stop: float, step: float) -> list[float]:
+    """Формирует возрастающую сетку без выхода за конечную границу."""
+    start = float(start)
+    stop = float(stop)
+    step = float(step)
+    if step <= 0:
+        raise ValueError("Grid step must be greater than zero.")
+    if start > stop:
+        raise ValueError("Grid start must be less than or equal to stop.")
+    values = [round(start, 10)]
+    current = start
+    while current + step < stop:
+        current += step
+        values.append(round(current, 10))
+    if values[-1] != round(stop, 10):
+        values.append(round(stop, 10))
+    return values
 
 
 def _interpolated_force(v: float, tool: ToolProfile) -> float:

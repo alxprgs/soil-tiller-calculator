@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
 import sys
 import threading
 import time
@@ -110,7 +111,7 @@ def validate_speed_limits(min_value: str, max_value: str) -> tuple[float, float,
         max_kmh = float(max_value)
     except ValueError:
         return 5.0, 12.0, True
-    if min_kmh < max_kmh:
+    if 0 < min_kmh < max_kmh:
         return min_kmh, max_kmh, False
     return 5.0, 12.0, True
 
@@ -126,7 +127,7 @@ def validate_depth_limits(min_value: str, max_value: str) -> tuple[float, float,
         max_cm = float(max_value)
     except ValueError:
         return 5.0, 20.0, True
-    if min_cm < max_cm:
+    if 0 < min_cm < max_cm:
         return min_cm, max_cm, False
     return 5.0, 20.0, True
 
@@ -254,6 +255,40 @@ def format_instruction_text(localizer: Localizer) -> str:
     return "\n".join(lines).strip()
 
 
+def load_startup_settings() -> tuple[AppSettings, Path | None, Exception | None]:
+    """Загружает стартовые настройки и восстанавливается после повреждённого config.json."""
+    config_path = active_config_path()
+    try:
+        return load_settings(config_path), None, None
+    except (ConfigError, OSError, ValueError) as exc:
+        LOGGER.warning("Failed to load config from %s: %s", config_path, exc)
+        backup_path = _backup_broken_config(config_path) if config_path.exists() else None
+        settings = AppSettings()
+        settings.last_seen_changelog_version = __version__
+        try:
+            save_settings(settings, config_path)
+        except OSError as save_exc:
+            LOGGER.warning("Failed to save recovered default config: %s", save_exc)
+        return settings, backup_path, exc
+
+
+def _backup_broken_config(config_path: Path) -> Path | None:
+    """Создаёт резервную копию повреждённого конфига рядом с исходным файлом."""
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    base_name = f"{config_path.stem}.broken-{timestamp}{config_path.suffix}"
+    backup_path = config_path.with_name(base_name)
+    counter = 1
+    while backup_path.exists():
+        backup_path = config_path.with_name(f"{config_path.stem}.broken-{timestamp}-{counter}{config_path.suffix}")
+        counter += 1
+    try:
+        shutil.copy2(config_path, backup_path)
+    except OSError as exc:
+        LOGGER.warning("Failed to back up broken config %s: %s", config_path, exc)
+        return None
+    return backup_path
+
+
 class Tooltip:
     """Всплывающая подсказка для небольших справочных значков."""
 
@@ -319,7 +354,12 @@ class MainWindow:
         LOGGER.debug("MainWindow initialization started; explicit_settings=%s", settings is not None)
         self.root = root
         self._config_existed_at_start = settings is None and active_config_path().exists()
-        self.settings = settings or load_settings()
+        self._config_recovery_backup: Path | None = None
+        self._config_recovery_error: Exception | None = None
+        if settings is None:
+            self.settings, self._config_recovery_backup, self._config_recovery_error = load_startup_settings()
+        else:
+            self.settings = settings
         if settings is None and not self._config_existed_at_start:
             self.settings.last_seen_changelog_version = __version__
         self.localizer = Localizer(self.settings.language)
@@ -376,6 +416,7 @@ class MainWindow:
         self._build()
         self.refresh_texts()
         self.calculate()
+        self._schedule_config_recovery_warning()
         self._schedule_startup_instruction()
         self._schedule_startup_changelog()
         LOGGER.debug("MainWindow initialization finished")
@@ -630,6 +671,21 @@ class MainWindow:
         if should_show_startup_changelog(self._config_existed_at_start, self.settings.last_seen_changelog_version):
             LOGGER.debug("Scheduling startup changelog")
             self.root.after_idle(lambda: self.open_changelog(mark_seen=True))
+
+    def _schedule_config_recovery_warning(self) -> None:
+        if self._config_recovery_error is None:
+            return
+        LOGGER.debug("Scheduling config recovery warning")
+        self.root.after_idle(
+            lambda: messagebox.showwarning(
+                self.localizer("warning"),
+                self.localizer(
+                    "config_recovered_warning",
+                    backup=str(self._config_recovery_backup) if self._config_recovery_backup is not None else self.localizer("config_recovered_no_backup"),
+                    error=str(self._config_recovery_error),
+                ),
+            )
+        )
 
     def create_help_button(self, master: tk.Widget, section_id: str) -> ttk.Button:
         """Создаёт справочный значок, открывающий нужный раздел инструкции."""
