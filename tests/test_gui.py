@@ -11,13 +11,16 @@ from soil_tiller_calculator.version import __version__
 from soil_tiller_calculator.gui import (
     AboutWindow,
     ChangelogWindow,
+    InstructionWindow,
     LicenseWindow,
     MainWindow,
     ToolManager,
     format_changelog,
+    format_instruction_text,
     is_newer_version,
     load_changelog_entries,
     should_show_startup_changelog,
+    should_show_startup_instruction,
     validate_depth,
     validate_depth_limits,
     validate_speed,
@@ -25,6 +28,12 @@ from soil_tiller_calculator.gui import (
     validate_speed_step,
     version_tuple,
 )
+
+
+def gui_settings(**kwargs) -> AppSettings:
+    defaults = {"startup_instruction_dismissed": True}
+    defaults.update(kwargs)
+    return AppSettings(**defaults)
 
 
 def test_validate_depth_accepts_valid_range() -> None:
@@ -89,6 +98,11 @@ def test_startup_changelog_visibility_rules() -> None:
     assert not should_show_startup_changelog(True, __version__)
 
 
+def test_startup_instruction_visibility_rules() -> None:
+    assert should_show_startup_instruction(False)
+    assert not should_show_startup_instruction(True)
+
+
 def test_changelog_resource_contains_release_history() -> None:
     entries = load_changelog_entries()
     text = format_changelog(entries, lambda key: "Current build" if key == "changelog.current_build" else key)
@@ -111,7 +125,7 @@ def test_main_window_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MPLCONFIGDIR", str(mpl_config))
 
     root.withdraw()
-    app = MainWindow(root, AppSettings())
+    app = MainWindow(root, gui_settings())
     menu = app.main_menu
     assert menu is not None
     file_menu = app.file_menu
@@ -129,9 +143,17 @@ def test_main_window_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
         if settings_menu.type(index) != "separator"
     ]
     assert app.localizer("changelog.title") in file_labels
+    assert app.localizer("instruction.title") in file_labels
     assert app.localizer("pretty_interface") in settings_labels
+    assert app.localizer("inline_help") in settings_labels
     assert app.pretty_interface_var.get() is False
     assert app.settings.pretty_interface_enabled is False
+    assert app.inline_help_var.get() is True
+    assert app.settings.inline_help_enabled is True
+    assert not app.depth_min_help.grid_info()
+    assert not app.depth_max_help.grid_info()
+    assert not app.speed_min_help.grid_info()
+    assert not app.speed_max_help.grid_info()
     assert app.menu_labels == ("Файл", "Инструменты", "Настройки")
     assert any(label == "Версия" and value == __version__ for label, value in app.about_details())
     assert any(label == "Лицензия" and value == "MIT" for label, value in app.about_details())
@@ -179,7 +201,7 @@ def test_pretty_interface_toggle_updates_style_and_settings(monkeypatch: pytest.
     monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda settings: saved.append(settings.pretty_interface_enabled))
     monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
     root.withdraw()
-    app = MainWindow(root, AppSettings())
+    app = MainWindow(root, gui_settings())
     saved.clear()
 
     app.pretty_interface_var.set(True)
@@ -195,6 +217,136 @@ def test_pretty_interface_toggle_updates_style_and_settings(monkeypatch: pytest.
     root.destroy()
 
 
+def test_inline_help_toggle_hides_and_restores_icons(monkeypatch: pytest.MonkeyPatch) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display is not available: {exc}")
+
+    saved: list[bool] = []
+    monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda settings: saved.append(settings.inline_help_enabled))
+    monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
+    root.withdraw()
+    app = MainWindow(root, gui_settings())
+    visible_icon = next(widget for widget in app._help_widgets if widget.grid_info())
+
+    app.inline_help_var.set(False)
+    app.toggle_inline_help()
+
+    assert app.settings.inline_help_enabled is False
+    assert saved[-1] is False
+    assert all(not widget.grid_info() for widget in app._help_widgets if widget.winfo_exists())
+
+    app.inline_help_var.set(True)
+    app.toggle_inline_help()
+
+    assert app.settings.inline_help_enabled is True
+    assert saved[-1] is True
+    assert visible_icon.grid_info()
+    root.destroy()
+
+
+def test_help_icon_opens_matching_instruction_section(monkeypatch: pytest.MonkeyPatch) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display is not available: {exc}")
+
+    opened: list[str | None] = []
+    monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
+    monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
+    root.withdraw()
+    app = MainWindow(root, gui_settings())
+    monkeypatch.setattr(app, "open_instruction", lambda section_id=None, **_kwargs: opened.append(section_id))
+
+    app.depth_entry.focus_set()
+    app._help_widgets[0].invoke()
+
+    assert opened == ["depth"]
+    root.destroy()
+
+
+def test_instruction_window_manual_mode_is_not_strict(monkeypatch: pytest.MonkeyPatch) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display is not available: {exc}")
+
+    monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
+    monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
+    root.withdraw()
+    app = MainWindow(root, gui_settings())
+    instruction = app.open_instruction(section_id="graphs")
+    instruction.window.withdraw()
+
+    assert str(instruction.close_button["state"]) == "normal"
+    assert instruction.dismiss_button is None
+    assert "F" in format_instruction_text(app.localizer)
+    assert instruction.section_id == "graphs"
+
+    instruction.window.destroy()
+    root.destroy()
+
+
+def test_instruction_window_strict_mode_unlocks_after_scroll(monkeypatch: pytest.MonkeyPatch) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display is not available: {exc}")
+
+    saved: list[bool] = []
+    monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda settings: saved.append(settings.startup_instruction_dismissed))
+    monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
+    root.withdraw()
+    app = MainWindow(root, gui_settings())
+    app.settings.startup_instruction_dismissed = False
+    instruction = InstructionWindow(app, root, modal=True, startup=True)
+    instruction.window.withdraw()
+
+    assert str(instruction.close_button["state"]) == "disabled"
+    assert instruction.dismiss_button is not None
+    assert str(instruction.dismiss_button["state"]) == "disabled"
+
+    instruction.text.yview_moveto(1.0)
+    instruction._check_read_to_end()
+
+    assert str(instruction.close_button["state"]) == "normal"
+    assert str(instruction.dismiss_button["state"]) == "normal"
+    instruction._dismiss_and_close()
+    assert app.settings.startup_instruction_dismissed is True
+    assert saved[-1] is True
+    root.destroy()
+
+
+def test_startup_instruction_is_scheduled_by_setting(monkeypatch: pytest.MonkeyPatch) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display is not available: {exc}")
+
+    callbacks: list[object] = []
+    monkeypatch.setattr(root, "after_idle", lambda callback: callbacks.append(callback))
+    monkeypatch.setattr("soil_tiller_calculator.gui.MainWindow._init_graphs", lambda self: None)
+    monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
+    monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
+    root.withdraw()
+
+    MainWindow(root, AppSettings(startup_instruction_dismissed=False))
+
+    assert callbacks
+    root.destroy()
+
+    root = tk.Tk()
+    callbacks = []
+    monkeypatch.setattr(root, "after_idle", lambda callback: callbacks.append(callback))
+    root.withdraw()
+
+    MainWindow(root, gui_settings())
+
+    assert callbacks == []
+    root.destroy()
+
+
 def test_about_window_adapts_to_window_width(monkeypatch: pytest.MonkeyPatch) -> None:
     try:
         root = tk.Tk()
@@ -204,7 +356,7 @@ def test_about_window_adapts_to_window_width(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
     monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
     root.withdraw()
-    app = MainWindow(root, AppSettings())
+    app = MainWindow(root, gui_settings())
     about = AboutWindow(app, root, check_updates=False)
     about.window.withdraw()
     assert about.window.winfo_width() <= 560
@@ -238,7 +390,7 @@ def test_about_window_reports_update_status(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("soil_tiller_calculator.gui.fetch_latest_release", lambda: ("v99.0.0", "https://example.test/release"))
     root.withdraw()
-    app = MainWindow(root, AppSettings())
+    app = MainWindow(root, gui_settings())
     about = AboutWindow(app, root, check_updates=False)
     about.window.withdraw()
 
@@ -260,7 +412,7 @@ def test_changelog_window_shows_bundled_history(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
     monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
     root.withdraw()
-    app = MainWindow(root, AppSettings(language="en"))
+    app = MainWindow(root, gui_settings(language="en"))
     changelog = ChangelogWindow(app.localizer, root)
     changelog.window.withdraw()
 
@@ -281,7 +433,7 @@ def test_license_window_reads_mit_license(monkeypatch: pytest.MonkeyPatch) -> No
 
     monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
     root.withdraw()
-    app = MainWindow(root, AppSettings())
+    app = MainWindow(root, gui_settings())
     license_window = LicenseWindow(app.localizer, root)
     license_window.window.withdraw()
 
@@ -301,7 +453,7 @@ def test_optimization_step_is_configured_from_settings_dialog(monkeypatch: pytes
     monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("soil_tiller_calculator.gui.simpledialog.askfloat", lambda *_args, **_kwargs: 0.25)
     root.withdraw()
-    app = MainWindow(root, AppSettings())
+    app = MainWindow(root, gui_settings())
 
     app.configure_optimization_step()
 
@@ -320,7 +472,7 @@ def test_graphs_always_include_required_builtin_tools(monkeypatch: pytest.Monkey
     monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
     monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
     root.withdraw()
-    app = MainWindow(root, AppSettings())
+    app = MainWindow(root, gui_settings())
     app.tool_mode_var.set("single")
     app.first_tool_var.set("kps")
 
@@ -342,7 +494,7 @@ def test_enabling_custom_limits_shows_assignment_warning(monkeypatch: pytest.Mon
     monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
     monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda _title, message: warnings.append(message))
     root.withdraw()
-    app = MainWindow(root, AppSettings())
+    app = MainWindow(root, gui_settings())
 
     app.custom_speed_limits_var.set(True)
     app.toggle_custom_speed_limits()
@@ -373,7 +525,7 @@ def test_custom_speed_limits_drive_auto_optimization(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr("soil_tiller_calculator.gui.optimize_speed", fake_optimize)
     root.withdraw()
-    app = MainWindow(root, AppSettings())
+    app = MainWindow(root, gui_settings())
     app.speed_mode_var.set("auto")
     app.custom_speed_limits_var.set(True)
     app.speed_min_var.set("3")
@@ -398,7 +550,7 @@ def test_invalid_custom_speed_limits_reset_to_default(monkeypatch: pytest.Monkey
     monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
     monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
     root.withdraw()
-    app = MainWindow(root, AppSettings())
+    app = MainWindow(root, gui_settings())
     app.custom_speed_limits_var.set(True)
     app.speed_min_var.set("20")
     app.speed_max_var.set("10")
@@ -418,7 +570,7 @@ def test_custom_depth_limits_and_invalid_step(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
     monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
     root.withdraw()
-    app = MainWindow(root, AppSettings())
+    app = MainWindow(root, gui_settings())
     app.custom_depth_limits_var.set(True)
     app.depth_min_var.set("4")
     app.depth_max_var.set("30")
@@ -444,7 +596,7 @@ def test_invalid_custom_depth_limits_reset_to_default(monkeypatch: pytest.Monkey
     monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
     monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
     root.withdraw()
-    app = MainWindow(root, AppSettings())
+    app = MainWindow(root, gui_settings())
     app.custom_depth_limits_var.set(True)
     app.depth_min_var.set("30")
     app.depth_max_var.set("4")
@@ -464,7 +616,7 @@ def test_tool_manager_adapts_to_window_width(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
     monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
     root.withdraw()
-    app = MainWindow(root, AppSettings())
+    app = MainWindow(root, gui_settings())
     manager = ToolManager(app, root)
     manager.window.withdraw()
 

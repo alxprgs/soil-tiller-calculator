@@ -35,6 +35,8 @@ class AppSettings:
     speed_step_kmh: float = 0.5
     last_seen_changelog_version: str = ""
     pretty_interface_enabled: bool = False
+    startup_instruction_dismissed: bool = False
+    inline_help_enabled: bool = True
 
     def all_tools(self) -> list[ToolProfile]:
         """Возвращает полный список инструментов: встроенные плюс пользовательские."""
@@ -58,6 +60,8 @@ class AppSettings:
                 "speed_step_kmh": self.speed_step_kmh,
                 "last_seen_changelog_version": self.last_seen_changelog_version,
                 "pretty_interface_enabled": self.pretty_interface_enabled,
+                "startup_instruction_dismissed": self.startup_instruction_dismissed,
+                "inline_help_enabled": self.inline_help_enabled,
             },
             "custom_tools": [tool.to_dict() for tool in self.custom_tools],
         }
@@ -208,6 +212,8 @@ def settings_from_dict(data: dict[str, Any]) -> AppSettings:
     speed_step_kmh = float(settings_data.get("speed_step_kmh", 0.5))
     last_seen_changelog_version = str(settings_data.get("last_seen_changelog_version", ""))
     pretty_interface_enabled = bool(settings_data.get("pretty_interface_enabled", False))
+    startup_instruction_dismissed = bool(settings_data.get("startup_instruction_dismissed", False))
+    inline_help_enabled = bool(settings_data.get("inline_help_enabled", True))
 
     tool_items = data.get("custom_tools", [])
     if not isinstance(tool_items, list):
@@ -236,6 +242,8 @@ def settings_from_dict(data: dict[str, Any]) -> AppSettings:
         speed_step_kmh=speed_step_kmh,
         last_seen_changelog_version=last_seen_changelog_version,
         pretty_interface_enabled=pretty_interface_enabled,
+        startup_instruction_dismissed=startup_instruction_dismissed,
+        inline_help_enabled=inline_help_enabled,
     )
 
 
@@ -262,4 +270,6 @@ def merge_imported_settings(current: AppSettings, imported: AppSettings) -> AppS
         speed_step_kmh=imported.speed_step_kmh,
         last_seen_changelog_version=imported.last_seen_changelog_version or current.last_seen_changelog_version,
         pretty_interface_enabled=imported.pretty_interface_enabled,
+        startup_instruction_dismissed=imported.startup_instruction_dismissed,
+        inline_help_enabled=imported.inline_help_enabled,
     )

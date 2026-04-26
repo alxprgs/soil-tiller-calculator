@@ -18,7 +18,7 @@ def test_application_window_starts_and_closes(monkeypatch) -> None:
 
     root.withdraw()
     try:
-        app = MainWindow(root, AppSettings())
+        app = MainWindow(root, AppSettings(startup_instruction_dismissed=True))
         root.after(10, root.quit)
         root.mainloop()
 

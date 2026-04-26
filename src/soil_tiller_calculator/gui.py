@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sys
 import threading
@@ -42,6 +43,24 @@ TOOL_MANAGER_BREAKPOINT = 680
 ABOUT_BREAKPOINT = 520
 GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/alxprgs/soil-tiller-calculator/releases/latest"
 CHANGELOG_RESOURCE = "CHANGELOG.json"
+HELP_ICON = "ⓘ"
+LOGGER = logging.getLogger(__name__)
+INSTRUCTION_SECTIONS = (
+    "overview",
+    "calculations",
+    "depth",
+    "speed",
+    "tool_mode",
+    "speed_mode",
+    "limits",
+    "results",
+    "graphs",
+    "file_menu",
+    "tools_menu",
+    "settings_menu",
+    "tool_manager",
+    "secondary_windows",
+)
 
 
 def validate_depth(value: str, min_cm: float = 5.0, max_cm: float = 20.0, fallback: float | None = None) -> tuple[float, bool]:
@@ -208,6 +227,82 @@ def should_show_startup_changelog(config_existed_at_start: bool, last_seen_versi
     return is_newer_version(current_version, last_seen_version)
 
 
+def should_show_startup_instruction(startup_instruction_dismissed: bool) -> bool:
+    """Проверяет, нужно ли показывать обязательную инструкцию при запуске."""
+    return not startup_instruction_dismissed
+
+
+def instruction_sections(localizer: Localizer) -> list[tuple[str, str, str]]:
+    """Возвращает локализованные разделы инструкции в порядке показа."""
+    sections: list[tuple[str, str, str]] = []
+    for section_id in INSTRUCTION_SECTIONS:
+        sections.append(
+            (
+                section_id,
+                localizer(f"instruction.section.{section_id}.title"),
+                localizer(f"instruction.section.{section_id}.body"),
+            )
+        )
+    return sections
+
+
+def format_instruction_text(localizer: Localizer) -> str:
+    """Собирает полный текст инструкции для текстового виджета."""
+    lines = [localizer("instruction.intro"), ""]
+    for _section_id, title, body in instruction_sections(localizer):
+        lines.extend((title, "-" * len(title), body, ""))
+    return "\n".join(lines).strip()
+
+
+class Tooltip:
+    """Всплывающая подсказка для небольших справочных значков."""
+
+    def __init__(self, widget: tk.Widget, text_getter) -> None:
+        self.widget = widget
+        self.text_getter = text_getter
+        self.window: tk.Toplevel | None = None
+        widget.bind("<Enter>", self.show, add="+")
+        widget.bind("<Leave>", self.hide, add="+")
+        widget.bind("<ButtonPress>", self.hide, add="+")
+        widget.bind("<Destroy>", self.hide, add="+")
+
+    def show(self, _event: tk.Event | None = None) -> None:
+        """Показывает подсказку рядом с виджетом."""
+        if self.window is not None:
+            return
+        text = self.text_getter()
+        if not text:
+            return
+        x = self.widget.winfo_rootx() + 18
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 8
+        self.window = tk.Toplevel(self.widget)
+        self.window.wm_overrideredirect(True)
+        self.window.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(
+            self.window,
+            text=text,
+            background="#ffffe0",
+            foreground="#111111",
+            relief="solid",
+            borderwidth=1,
+            padx=6,
+            pady=3,
+            wraplength=280,
+            justify="left",
+        )
+        label.pack()
+
+    def hide(self, _event: tk.Event | None = None) -> None:
+        """Скрывает подсказку, если она открыта."""
+        if self.window is None:
+            return
+        try:
+            self.window.destroy()
+        except tk.TclError:
+            pass
+        self.window = None
+
+
 class MainWindow:
     """Главное окно приложения.
 
@@ -221,6 +316,7 @@ class MainWindow:
         root: корневой объект Tk.
         settings: настройки приложения; если не переданы, загружаются из конфига.
         """
+        LOGGER.debug("MainWindow initialization started; explicit_settings=%s", settings is not None)
         self.root = root
         self._config_existed_at_start = settings is None and active_config_path().exists()
         self.settings = settings or load_settings()
@@ -256,6 +352,7 @@ class MainWindow:
         self._last_graph_orientation: str | None = None
         self._last_depth = 10.0
         self._last_tools: list[ToolProfile] = []
+        self._help_widgets: list[tk.Widget] = []
 
         self.depth_var = tk.StringVar(value="10.0")
         self.speed_var = tk.StringVar(value="8.0")
@@ -268,6 +365,7 @@ class MainWindow:
         self.depth_max_var = tk.StringVar(value=f"{self.settings.depth_max_cm:.1f}")
         self.speed_step_var = tk.StringVar(value=f"{self.settings.speed_step_kmh:.1f}")
         self.pretty_interface_var = tk.BooleanVar(value=self.settings.pretty_interface_enabled)
+        self.inline_help_var = tk.BooleanVar(value=self.settings.inline_help_enabled)
         self.tool_mode_var = tk.StringVar(value="builtin_compare")
         self.tool_mode_display_var = tk.StringVar()
         self.speed_mode_var = tk.StringVar(value="manual")
@@ -278,7 +376,9 @@ class MainWindow:
         self._build()
         self.refresh_texts()
         self.calculate()
+        self._schedule_startup_instruction()
         self._schedule_startup_changelog()
+        LOGGER.debug("MainWindow initialization finished")
 
     @property
     def tools(self) -> dict[str, ToolProfile]:
@@ -293,9 +393,11 @@ class MainWindow:
 
         self.parameters = ttk.LabelFrame(self.root)
         self.parameters.columnconfigure(1, weight=1)
+        self.parameters.columnconfigure(2, weight=0)
 
         self.graphs = ttk.Frame(self.root)
         self.graphs.columnconfigure(0, weight=1)
+        self.graphs.columnconfigure(1, weight=0)
         self.graphs.rowconfigure(0, weight=1)
         self.graphs.bind("<Configure>", self._schedule_graph_resize)
 
@@ -305,57 +407,69 @@ class MainWindow:
 
         self.depth_label = ttk.Label(self.parameters)
         self.depth_label.grid(row=0, column=0, sticky="w", padx=8, pady=5)
-        ttk.Entry(self.parameters, textvariable=self.depth_var, width=12).grid(row=0, column=1, sticky="ew", padx=8, pady=5)
+        self.depth_entry = ttk.Entry(self.parameters, textvariable=self.depth_var, width=12)
+        self.depth_entry.grid(row=0, column=1, sticky="ew", padx=8, pady=5)
+        self._grid_help(self.parameters, 0, "depth")
 
         self.depth_min_label = ttk.Label(self.parameters)
         self.depth_min_label.grid(row=1, column=0, sticky="w", padx=8, pady=5)
         self.depth_min_entry = ttk.Entry(self.parameters, textvariable=self.depth_min_var, width=12)
         self.depth_min_entry.grid(row=1, column=1, sticky="ew", padx=8, pady=5)
+        self.depth_min_help = self._grid_help(self.parameters, 1, "limits")
 
         self.depth_max_label = ttk.Label(self.parameters)
         self.depth_max_label.grid(row=2, column=0, sticky="w", padx=8, pady=5)
         self.depth_max_entry = ttk.Entry(self.parameters, textvariable=self.depth_max_var, width=12)
         self.depth_max_entry.grid(row=2, column=1, sticky="ew", padx=8, pady=5)
+        self.depth_max_help = self._grid_help(self.parameters, 2, "limits")
 
         self.tool_mode_label = ttk.Label(self.parameters)
         self.tool_mode_label.grid(row=3, column=0, sticky="w", padx=8, pady=5)
         self.tool_mode_combo = ttk.Combobox(self.parameters, state="readonly", textvariable=self.tool_mode_display_var)
         self.tool_mode_combo.grid(row=3, column=1, sticky="ew", padx=8, pady=5)
         self.tool_mode_combo.bind("<<ComboboxSelected>>", lambda _event: self._set_tool_mode_from_display())
+        self._grid_help(self.parameters, 3, "tool_mode")
 
         self.first_tool_label = ttk.Label(self.parameters)
         self.first_tool_label.grid(row=4, column=0, sticky="w", padx=8, pady=5)
         self.first_tool_combo = ttk.Combobox(self.parameters, state="readonly", textvariable=self.first_tool_var)
         self.first_tool_combo.grid(row=4, column=1, sticky="ew", padx=8, pady=5)
+        self._grid_help(self.parameters, 4, "tool_mode")
 
         self.second_tool_label = ttk.Label(self.parameters)
         self.second_tool_label.grid(row=5, column=0, sticky="w", padx=8, pady=5)
         self.second_tool_combo = ttk.Combobox(self.parameters, state="readonly", textvariable=self.second_tool_var)
         self.second_tool_combo.grid(row=5, column=1, sticky="ew", padx=8, pady=5)
+        self._grid_help(self.parameters, 5, "tool_mode")
 
         self.speed_mode_label = ttk.Label(self.parameters)
         self.speed_mode_label.grid(row=6, column=0, sticky="w", padx=8, pady=5)
         self.speed_mode_combo = ttk.Combobox(self.parameters, state="readonly", textvariable=self.speed_mode_display_var)
         self.speed_mode_combo.grid(row=6, column=1, sticky="ew", padx=8, pady=5)
         self.speed_mode_combo.bind("<<ComboboxSelected>>", lambda _event: self._set_speed_mode_from_display())
+        self._grid_help(self.parameters, 6, "speed_mode")
 
         self.speed_label = ttk.Label(self.parameters)
         self.speed_label.grid(row=7, column=0, sticky="w", padx=8, pady=5)
         self.speed_entry = ttk.Entry(self.parameters, textvariable=self.speed_var, width=12)
         self.speed_entry.grid(row=7, column=1, sticky="ew", padx=8, pady=5)
+        self._grid_help(self.parameters, 7, "speed")
 
         self.speed_min_label = ttk.Label(self.parameters)
         self.speed_min_label.grid(row=8, column=0, sticky="w", padx=8, pady=5)
         self.speed_min_entry = ttk.Entry(self.parameters, textvariable=self.speed_min_var, width=12)
         self.speed_min_entry.grid(row=8, column=1, sticky="ew", padx=8, pady=5)
+        self.speed_min_help = self._grid_help(self.parameters, 8, "limits")
 
         self.speed_max_label = ttk.Label(self.parameters)
         self.speed_max_label.grid(row=9, column=0, sticky="w", padx=8, pady=5)
         self.speed_max_entry = ttk.Entry(self.parameters, textvariable=self.speed_max_var, width=12)
         self.speed_max_entry.grid(row=9, column=1, sticky="ew", padx=8, pady=5)
+        self.speed_max_help = self._grid_help(self.parameters, 9, "limits")
 
         self.calculate_button = ttk.Button(self.parameters, command=self.calculate)
         self.calculate_button.grid(row=10, column=0, columnspan=2, sticky="ew", padx=8, pady=(14, 5))
+        self._grid_help(self.parameters, 10, "calculations", pady=(14, 5))
 
         self.results_text = tk.Text(self.results_panel, width=38, wrap="word")
         self.results_scrollbar = ttk.Scrollbar(self.results_panel, orient="vertical", command=self.results_text.yview)
@@ -398,6 +512,7 @@ class MainWindow:
         self.speed_mode_display_var.set(speed_labels.get(self.speed_mode_var.get(), speed_labels["manual"]))
         self._update_tool_controls()
         self._update_speed_controls()
+        self._update_help_icons()
         self._update_speed_limit_controls()
         self._update_depth_limit_controls()
         self._apply_interface_style()
@@ -410,6 +525,7 @@ class MainWindow:
         """
         if language is not None:
             self.language_var.set(language)
+        LOGGER.debug("Changing language to %s", self.language_var.get())
         self.settings.language = self.language_var.get()
         self.localizer.set_language(self.settings.language)
         self.refresh_texts()
@@ -418,6 +534,7 @@ class MainWindow:
 
     def toggle_custom_speed_limits(self) -> None:
         """Включает или выключает пользовательские пороги скорости."""
+        LOGGER.debug("Custom speed limits toggled: %s", self.custom_speed_limits_var.get())
         self.settings.custom_speed_limits_enabled = self.custom_speed_limits_var.get()
         if self.custom_speed_limits_var.get():
             messagebox.showwarning(self.localizer("warning"), self.localizer("custom_speed_limits_tz_warning"))
@@ -426,6 +543,7 @@ class MainWindow:
 
     def toggle_custom_depth_limits(self) -> None:
         """Включает или выключает пользовательские пороги глубины обработки."""
+        LOGGER.debug("Custom depth limits toggled: %s", self.custom_depth_limits_var.get())
         self.settings.custom_depth_limits_enabled = self.custom_depth_limits_var.get()
         if self.custom_depth_limits_var.get():
             messagebox.showwarning(self.localizer("warning"), self.localizer("custom_depth_limits_tz_warning"))
@@ -434,6 +552,7 @@ class MainWindow:
 
     def configure_optimization_step(self) -> None:
         """Открывает диалог настройки шага перебора скоростей для оптимизации."""
+        LOGGER.debug("Opening optimization step dialog; current_step=%s", self.settings.speed_step_kmh)
         value = simpledialog.askfloat(
             self.localizer("speed_step"),
             self.localizer("speed_step_prompt"),
@@ -449,32 +568,100 @@ class MainWindow:
             speed_step = 0.5
         self.speed_step_var.set(f"{speed_step:g}")
         self.settings.speed_step_kmh = speed_step
+        LOGGER.debug("Optimization step configured: %s", speed_step)
         save_settings(self.settings)
         self.calculate()
 
     def toggle_pretty_interface(self) -> None:
         """Включает или выключает улучшенное оформление интерфейса."""
+        LOGGER.debug("Pretty interface toggled: %s", self.pretty_interface_var.get())
         self.settings.pretty_interface_enabled = self.pretty_interface_var.get()
         self._apply_interface_style()
         save_settings(self.settings)
         self.calculate()
 
+    def toggle_inline_help(self) -> None:
+        """Включает или выключает справочные значки рядом с элементами интерфейса."""
+        LOGGER.debug("Inline help toggled: %s", self.inline_help_var.get())
+        self.settings.inline_help_enabled = self.inline_help_var.get()
+        self._update_help_icons()
+        self._update_speed_limit_controls()
+        self._update_depth_limit_controls()
+        save_settings(self.settings)
+
     def open_about(self) -> None:
         """Открывает адаптивное окно со сведениями о приложении."""
+        LOGGER.debug("Opening about window")
         about = AboutWindow(self, self.root)
         self._apply_plain_widget_style(about.window)
+        self._update_help_icons()
+
+    def open_instruction(self, section_id: str | None = None, *, modal: bool = False, startup: bool = False) -> "InstructionWindow":
+        """Открывает полную инструкцию или конкретный раздел справки."""
+        LOGGER.debug("Opening instruction window; section=%s modal=%s startup=%s", section_id, modal, startup)
+        instruction = InstructionWindow(self, self.root, section_id=section_id, modal=modal, startup=startup)
+        self._apply_plain_widget_style(instruction.window)
+        if modal:
+            instruction.start_modal()
+        return instruction
+
+    def dismiss_startup_instruction(self) -> None:
+        """Запоминает, что стартовую инструкцию больше не нужно показывать."""
+        LOGGER.debug("Dismissing startup instruction permanently")
+        self.settings.startup_instruction_dismissed = True
+        save_settings(self.settings)
 
     def open_changelog(self, mark_seen: bool = False) -> None:
         """Открывает окно со встроенной историей изменений."""
-        changelog = ChangelogWindow(self.localizer, self.root)
+        LOGGER.debug("Opening changelog window; mark_seen=%s", mark_seen)
+        changelog = ChangelogWindow(self.localizer, self.root, self)
         self._apply_plain_widget_style(changelog.window)
+        self._update_help_icons()
         if mark_seen:
             self.settings.last_seen_changelog_version = __version__
             save_settings(self.settings)
 
+    def _schedule_startup_instruction(self) -> None:
+        if should_show_startup_instruction(self.settings.startup_instruction_dismissed):
+            LOGGER.debug("Scheduling startup instruction")
+            self.root.after_idle(lambda: self.open_instruction(modal=True, startup=True))
+
     def _schedule_startup_changelog(self) -> None:
         if should_show_startup_changelog(self._config_existed_at_start, self.settings.last_seen_changelog_version):
+            LOGGER.debug("Scheduling startup changelog")
             self.root.after_idle(lambda: self.open_changelog(mark_seen=True))
+
+    def create_help_button(self, master: tk.Widget, section_id: str) -> ttk.Button:
+        """Создаёт справочный значок, открывающий нужный раздел инструкции."""
+        button = ttk.Button(master, text=HELP_ICON, width=2, command=lambda: self.open_instruction(section_id=section_id))
+        Tooltip(button, lambda: self.localizer("help.icon_tooltip"))
+        self._help_widgets.append(button)
+        return button
+
+    def _grid_help(self, master: tk.Widget, row: int, section_id: str, *, pady: int | tuple[int, int] = 5) -> ttk.Button:
+        """Создаёт и размещает справочный значок в строке формы."""
+        button = self.create_help_button(master, section_id)
+        button.grid(row=row, column=2, sticky="e", padx=(0, 8), pady=pady)
+        return button
+
+    def _update_help_icons(self) -> None:
+        """Показывает или скрывает все справочные значки по настройке."""
+        for widget in self._help_widgets:
+            try:
+                if self.inline_help_var.get():
+                    widget.grid()
+                else:
+                    widget.grid_remove()
+            except tk.TclError:
+                continue
+        if not self.custom_speed_limits_var.get():
+            for widget in (getattr(self, "speed_min_help", None), getattr(self, "speed_max_help", None)):
+                if widget is not None:
+                    widget.grid_remove()
+        if not self.custom_depth_limits_var.get():
+            for widget in (getattr(self, "depth_min_help", None), getattr(self, "depth_max_help", None)):
+                if widget is not None:
+                    widget.grid_remove()
 
     def about_details(self) -> list[tuple[str, str]]:
         """Возвращает строки для окна «О приложении»."""
@@ -504,6 +691,13 @@ class MainWindow:
         Метод валидирует глубину, скорость и пороги, выбирает инструменты,
         запускает ручной расчёт или автооптимизацию, обновляет текст и графики.
         """
+        LOGGER.debug(
+            "Calculation requested; depth=%s speed=%s tool_mode=%s speed_mode=%s",
+            self.depth_var.get(),
+            self.speed_var.get(),
+            self.tool_mode_var.get(),
+            self.speed_mode_var.get(),
+        )
         depth_min, depth_max = self._depth_limits()
         depth_fallback = self._depth_fallback(depth_min, depth_max)
         depth, depth_warn = validate_depth(self.depth_var.get(), depth_min, depth_max, depth_fallback)
@@ -518,6 +712,7 @@ class MainWindow:
             optimization = optimize_speed(depth, selected_tools, start=speed_min, stop=speed_max, step=speed_step)
             speed = optimization.speed_kmh
             q_min = optimization.q_min
+            LOGGER.debug("Auto speed selected: speed=%s q_min=%s", speed, q_min)
         else:
             fallback = self._speed_fallback(speed_min, speed_max)
             speed, speed_warn = validate_speed(self.speed_var.get(), speed_min, speed_max, fallback)
@@ -529,17 +724,23 @@ class MainWindow:
         self._render_results(depth, speed, selected_tools, q_min)
         self._render_graphs(depth, selected_tools, speed_min, speed_max)
         save_settings(self.settings)
+        LOGGER.debug("Calculation finished; depth=%s speed=%s tools=%s", depth, speed, [tool.id for tool in selected_tools])
 
     def open_tool_manager(self) -> None:
         """Открывает отдельное окно управления пользовательскими инструментами."""
+        LOGGER.debug("Opening tool manager")
         manager = ToolManager(self, self.root)
         self._apply_plain_widget_style(manager.window)
+        self._update_help_icons()
 
     def import_config(self) -> None:
         """Импортирует настройки и инструменты из выбранного JSON-файла."""
+        LOGGER.debug("Opening config import dialog")
         path = filedialog.askopenfilename(filetypes=[("JSON", "*.json"), ("All files", "*.*")])
         if not path:
+            LOGGER.debug("Config import cancelled")
             return
+        LOGGER.debug("Importing config from %s", path)
         try:
             imported = settings_from_json(Path(path).read_text(encoding="utf-8"))
         except (ConfigError, OSError, ValueError) as exc:
@@ -555,23 +756,29 @@ class MainWindow:
         self.depth_max_var.set(f"{self.settings.depth_max_cm:.1f}")
         self.speed_step_var.set(f"{self.settings.speed_step_kmh:.1f}")
         self.pretty_interface_var.set(self.settings.pretty_interface_enabled)
+        self.inline_help_var.set(self.settings.inline_help_enabled)
         self.localizer.set_language(self.settings.language)
         self._refresh_tool_options()
         self.refresh_texts()
         self.calculate()
         messagebox.showinfo(self.localizer("info"), self.localizer("config_imported"))
+        LOGGER.debug("Config import finished")
 
     def export_config(self) -> None:
         """Экспортирует текущие настройки и пользовательские инструменты в JSON."""
+        LOGGER.debug("Opening config export dialog")
         path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON", "*.json")])
         if not path:
+            LOGGER.debug("Config export cancelled")
             return
+        LOGGER.debug("Exporting config to %s", path)
         try:
             Path(path).write_text(settings_to_json(self.settings), encoding="utf-8")
         except OSError as exc:
             messagebox.showerror(self.localizer("error"), str(exc))
             return
         messagebox.showinfo(self.localizer("info"), self.localizer("config_exported"))
+        LOGGER.debug("Config export finished")
 
     def choose_config_location(self) -> None:
         """Позволяет выбрать постоянное место хранения основного config.json."""
@@ -754,11 +961,16 @@ class MainWindow:
             self.speed_min_entry.grid()
             self.speed_max_label.grid()
             self.speed_max_entry.grid()
+            if self.inline_help_var.get():
+                self.speed_min_help.grid()
+                self.speed_max_help.grid()
         else:
             self.speed_min_label.grid_remove()
             self.speed_min_entry.grid_remove()
             self.speed_max_label.grid_remove()
             self.speed_max_entry.grid_remove()
+            self.speed_min_help.grid_remove()
+            self.speed_max_help.grid_remove()
 
     def _update_depth_limit_controls(self) -> None:
         """Показывает или скрывает поля пользовательских границ глубины."""
@@ -767,11 +979,16 @@ class MainWindow:
             self.depth_min_entry.grid()
             self.depth_max_label.grid()
             self.depth_max_entry.grid()
+            if self.inline_help_var.get():
+                self.depth_min_help.grid()
+                self.depth_max_help.grid()
         else:
             self.depth_min_label.grid_remove()
             self.depth_min_entry.grid_remove()
             self.depth_max_label.grid_remove()
             self.depth_max_entry.grid_remove()
+            self.depth_min_help.grid_remove()
+            self.depth_max_help.grid_remove()
 
     def _tool_mode_labels(self) -> dict[str, str]:
         """Возвращает локализованные подписи режимов выбора инструментов."""
@@ -963,6 +1180,8 @@ class MainWindow:
         file_menu.add_command(label=self.localizer("config_change_location"), command=self.choose_config_location)
         file_menu.add_command(label=self.localizer("config_use_default_location"), command=self.use_default_config_location)
         file_menu.add_separator()
+        file_menu.add_command(label=self.localizer("instruction.title"), command=self.open_instruction)
+        file_menu.add_separator()
         file_menu.add_command(label=self.localizer("changelog.title"), command=self.open_changelog)
         file_menu.add_separator()
         file_menu.add_command(label=self.localizer("about.title"), command=self.open_about)
@@ -991,6 +1210,11 @@ class MainWindow:
             label=self.localizer("pretty_interface"),
             variable=self.pretty_interface_var,
             command=self.toggle_pretty_interface,
+        )
+        settings_menu.add_checkbutton(
+            label=self.localizer("inline_help"),
+            variable=self.inline_help_var,
+            command=self.toggle_inline_help,
         )
         settings_menu.add_command(label=self.localizer("speed_step"), command=self.configure_optimization_step)
 
@@ -1164,11 +1388,172 @@ class MainWindow:
         return speed_min, speed_max
 
 
+class InstructionWindow:
+    """Окно полной инструкции и контекстной справки."""
+
+    def __init__(
+        self,
+        app: MainWindow,
+        master: tk.Tk | tk.Toplevel,
+        *,
+        section_id: str | None = None,
+        modal: bool = False,
+        startup: bool = False,
+    ) -> None:
+        LOGGER.debug("InstructionWindow initialization; section=%s modal=%s startup=%s", section_id, modal, startup)
+        self.app = app
+        self.localizer = app.localizer
+        self.section_id = section_id
+        self.modal = modal
+        self.startup = startup
+        self.read_to_end = not modal
+        self.section_indices: dict[str, str] = {}
+
+        self.window = tk.Toplevel(master)
+        self.window.title(self.localizer("instruction.title"))
+        self.window.geometry("760x560")
+        self.window.minsize(440, 340)
+        self.window.transient(master)
+        self.window.columnconfigure(0, weight=1)
+        self.window.rowconfigure(1, weight=1)
+
+        self.title_label = ttk.Label(self.window, text=self.localizer("instruction.title"), font=("TkDefaultFont", 12, "bold"))
+        self.title_label.grid(row=0, column=0, columnspan=2, sticky="w", padx=12, pady=(12, 4))
+
+        self.text = tk.Text(self.window, wrap="word", height=22)
+        self.scrollbar = ttk.Scrollbar(self.window, orient="vertical", command=self._scroll_text)
+        self.text.configure(yscrollcommand=self._on_text_scroll)
+        self.text.grid(row=1, column=0, sticky="nsew", padx=(12, 0), pady=8)
+        self.scrollbar.grid(row=1, column=1, sticky="ns", padx=(0, 12), pady=8)
+
+        self.buttons_frame = ttk.Frame(self.window)
+        self.buttons_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
+        self.buttons_frame.columnconfigure(0, weight=1)
+
+        self.dismiss_button: ttk.Button | None = None
+        if startup:
+            self.dismiss_button = ttk.Button(
+                self.buttons_frame,
+                text=self.localizer("instruction.do_not_show_again"),
+                command=self._dismiss_and_close,
+            )
+            self.dismiss_button.grid(row=0, column=1, sticky="e", padx=(0, 6))
+
+        self.close_button = ttk.Button(self.buttons_frame, text=self.localizer("tools.close"), command=self.close)
+        self.close_button.grid(row=0, column=2, sticky="e")
+
+        self._insert_instruction_text()
+        self.text.configure(state="disabled")
+        if modal:
+            self._set_close_enabled(False)
+            self.window.protocol("WM_DELETE_WINDOW", self._block_close)
+        else:
+            self._set_close_enabled(True)
+            self.window.protocol("WM_DELETE_WINDOW", self.close)
+        self._center_on_screen()
+        self.window.after_idle(self._after_open)
+
+    def start_modal(self) -> None:
+        """Запускает модальный режим и ждёт закрытия окна."""
+        self.window.grab_set()
+        self.window.focus_set()
+        self.window.wait_window()
+
+    def close(self) -> None:
+        """Закрывает окно, если чтение разрешило выход."""
+        if self.modal and not self.read_to_end:
+            LOGGER.debug("InstructionWindow close blocked until text end")
+            self._block_close()
+            return
+        try:
+            self.window.grab_release()
+        except tk.TclError:
+            pass
+        self.window.destroy()
+
+    def _dismiss_and_close(self) -> None:
+        """Сохраняет отказ от стартовой инструкции и закрывает окно."""
+        if self.modal and not self.read_to_end:
+            LOGGER.debug("InstructionWindow dismiss blocked until text end")
+            self._block_close()
+            return
+        LOGGER.debug("InstructionWindow dismissed with do-not-show-again")
+        self.app.dismiss_startup_instruction()
+        self.close()
+
+    def _block_close(self) -> None:
+        """Мягко сообщает, что сначала нужно дочитать инструкцию."""
+        try:
+            self.window.bell()
+        except tk.TclError:
+            pass
+
+    def _insert_instruction_text(self) -> None:
+        """Заполняет текстовый виджет разделами инструкции."""
+        self.text.tag_configure("title", font=("TkDefaultFont", 12, "bold"), spacing3=4)
+        self.text.tag_configure("section_title", font=("TkDefaultFont", 10, "bold"), spacing1=10, spacing3=3)
+        self.text.insert("end", self.localizer("instruction.intro") + "\n\n")
+        for section_id, title, body in instruction_sections(self.localizer):
+            tag_name = f"section_{section_id}"
+            self.section_indices[section_id] = self.text.index("end-1c")
+            self.text.insert("end", title + "\n", ("section_title", tag_name))
+            self.text.insert("end", "-" * len(title) + "\n")
+            self.text.insert("end", body + "\n\n")
+
+    def _after_open(self) -> None:
+        """Прокручивает к нужному разделу и проверяет состояние чтения."""
+        if self.section_id in self.section_indices:
+            self.text.see(self.section_indices[self.section_id])
+        self._check_read_to_end()
+        self.window.focus_set()
+
+    def _scroll_text(self, *args: object) -> None:
+        """Прокручивает текст и проверяет достижение конца."""
+        self.text.yview(*args)
+        self._check_read_to_end()
+
+    def _on_text_scroll(self, first: str, last: str) -> None:
+        """Синхронизирует scrollbar и включает закрытие после конца текста."""
+        self.scrollbar.set(first, last)
+        self._check_read_to_end()
+
+    def _check_read_to_end(self) -> None:
+        """Проверяет, дочитал ли пользователь текст до конца."""
+        if self.read_to_end:
+            return
+        try:
+            _first, last = self.text.yview()
+        except tk.TclError:
+            return
+        if last >= 0.999:
+            self.read_to_end = True
+            self._set_close_enabled(True)
+            self.window.protocol("WM_DELETE_WINDOW", self.close)
+            LOGGER.debug("InstructionWindow read-to-end reached")
+
+    def _set_close_enabled(self, enabled: bool) -> None:
+        """Включает или выключает кнопки выхода из строгого окна."""
+        state = "normal" if enabled else "disabled"
+        self.close_button.configure(state=state)
+        if self.dismiss_button is not None:
+            self.dismiss_button.configure(state=state)
+
+    def _center_on_screen(self) -> None:
+        self.window.update_idletasks()
+        width = self.window.winfo_width()
+        height = self.window.winfo_height()
+        x = max(0, (self.window.winfo_screenwidth() - width) // 2)
+        y = max(0, (self.window.winfo_screenheight() - height) // 2)
+        self.window.geometry(f"{width}x{height}+{x}+{y}")
+
+
 class ChangelogWindow:
     """Окно со встроенной историей релизов."""
 
-    def __init__(self, localizer: Localizer, master: tk.Tk | tk.Toplevel) -> None:
+    def __init__(self, localizer: Localizer, master: tk.Tk | tk.Toplevel, app: MainWindow | None = None) -> None:
+        LOGGER.debug("ChangelogWindow initialization")
         self.localizer = localizer
+        self.app = app
         self.window = tk.Toplevel(master)
         self.window.title(self.localizer("changelog.title"))
         self.window.geometry("720x480")
@@ -1178,7 +1563,10 @@ class ChangelogWindow:
         self.window.rowconfigure(1, weight=1)
 
         self.title_label = ttk.Label(self.window, text=self.localizer("changelog.title"), font=("TkDefaultFont", 12, "bold"))
-        self.title_label.grid(row=0, column=0, columnspan=2, sticky="w", padx=12, pady=(12, 4))
+        self.title_label.grid(row=0, column=0, sticky="w", padx=12, pady=(12, 4))
+        if self.app is not None:
+            self.help_button = self.app.create_help_button(self.window, "secondary_windows")
+            self.help_button.grid(row=0, column=1, sticky="e", padx=(0, 12), pady=(12, 4))
 
         self.text = tk.Text(self.window, wrap="word", height=18)
         self.scrollbar = ttk.Scrollbar(self.window, orient="vertical", command=self.text.yview)
@@ -1207,6 +1595,7 @@ class AboutWindow:
     """Адаптивное окно со сведениями о приложении."""
 
     def __init__(self, app: MainWindow, master: tk.Tk, check_updates: bool = True) -> None:
+        LOGGER.debug("AboutWindow initialization; check_updates=%s", check_updates)
         self.app = app
         self.localizer = app.localizer
         self.window = tk.Toplevel(master)
@@ -1225,8 +1614,10 @@ class AboutWindow:
         self.container = ttk.Frame(self.window, padding=(16, 14))
         self.container.columnconfigure(0, weight=1)
         self.container.columnconfigure(1, weight=2)
+        self.container.columnconfigure(2, weight=0)
 
         self.title_label = ttk.Label(self.container, text=self.localizer("app.title"), font=("TkDefaultFont", 12, "bold"))
+        self.title_help = app.create_help_button(self.container, "secondary_windows")
         self.subtitle_label = ttk.Label(self.container, text=self.localizer("about.subtitle"), wraplength=480)
 
         for label_text, value_text in app.about_details():
@@ -1277,6 +1668,7 @@ class AboutWindow:
         self._timestamp_job = self.window.after(1000, self._schedule_timestamp_refresh)
 
     def check_updates(self) -> None:
+        LOGGER.debug("Starting update check thread")
         thread = threading.Thread(target=self._check_updates_in_background, daemon=True)
         thread.start()
 
@@ -1284,6 +1676,7 @@ class AboutWindow:
         try:
             latest_tag, release_url = fetch_latest_release()
         except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError) as exc:
+            LOGGER.debug("Update check failed: %s", exc)
             self._schedule_update_status(self.localizer("about.updates_error", message=str(exc)), None)
             return
 
@@ -1292,6 +1685,7 @@ class AboutWindow:
             self._schedule_update_status(text, release_url)
         else:
             self._schedule_update_status(self.localizer("about.updates_current"), release_url)
+        LOGGER.debug("Update check finished; latest=%s url=%s", latest_tag, release_url)
 
     def _schedule_update_status(self, text: str, url: str | None) -> None:
         try:
@@ -1304,7 +1698,8 @@ class AboutWindow:
         self.update_url = url
 
     def open_license(self) -> None:
-        LicenseWindow(self.localizer, self.window)
+        LicenseWindow(self.localizer, self.window, self.app)
+        self.app._update_help_icons()
 
     def _on_configure(self, event: tk.Event) -> None:
         if event.widget is self.window:
@@ -1325,7 +1720,8 @@ class AboutWindow:
         self.window.rowconfigure(0, weight=1)
         self.container.grid(row=0, column=0, sticky="nsew")
         self.title_label.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
-        self.subtitle_label.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        self.title_help.grid(row=0, column=2, sticky="e", pady=(0, 4))
+        self.subtitle_label.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(0, 8))
 
         row = 2
         if mode == "wide":
@@ -1343,7 +1739,7 @@ class AboutWindow:
                 value.grid(row=row + 1, column=0, columnspan=2, sticky="ew", pady=(0, 2))
                 row += 2
 
-        self.close_button.grid(row=row, column=0, columnspan=2, sticky="e", pady=(10, 0))
+        self.close_button.grid(row=row, column=0, columnspan=3, sticky="e", pady=(10, 0))
         self._update_wrap(width)
 
     def _update_wrap(self, width: int) -> None:
@@ -1358,8 +1754,10 @@ class AboutWindow:
 class LicenseWindow:
     """Окно с текстом MIT-лицензии."""
 
-    def __init__(self, localizer: Localizer, master: tk.Toplevel) -> None:
+    def __init__(self, localizer: Localizer, master: tk.Toplevel, app: MainWindow | None = None) -> None:
+        LOGGER.debug("LicenseWindow initialization")
         self.localizer = localizer
+        self.app = app
         self.window = tk.Toplevel(master)
         self.window.title(self.localizer("about.license_title"))
         self.window.geometry("640x420")
@@ -1373,8 +1771,11 @@ class LicenseWindow:
         self.text.configure(yscrollcommand=self.scrollbar.set)
         self.text.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
         self.scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, 10), pady=10)
+        if self.app is not None:
+            self.help_button = self.app.create_help_button(self.window, "secondary_windows")
+            self.help_button.grid(row=0, column=2, sticky="ne", padx=(0, 10), pady=10)
         self.close_button = ttk.Button(self.window, text=self.localizer("tools.close"), command=self.window.destroy)
-        self.close_button.grid(row=1, column=0, columnspan=2, sticky="e", padx=10, pady=(0, 10))
+        self.close_button.grid(row=1, column=0, columnspan=3, sticky="e", padx=10, pady=(0, 10))
 
         self.text.insert("1.0", self._license_text())
         self.text.configure(state="disabled")
@@ -1400,6 +1801,7 @@ class ToolManager:
         app: главное окно, через которое доступны настройки и список инструментов.
         master: родительское Tk-окно.
         """
+        LOGGER.debug("ToolManager initialization")
         self.app = app
         self.localizer = app.localizer
         self.window = tk.Toplevel(master)
@@ -1430,6 +1832,7 @@ class ToolManager:
 
         self.form_frame = ttk.Frame(self.window)
         self.form_frame.columnconfigure(1, weight=1)
+        self.form_frame.columnconfigure(2, weight=0)
         self._add_row(0, "tools.id", self.id_var)
         self._add_row(1, "tools.name", self.name_var)
         self._add_row(2, "tools.width", self.width_var)
@@ -1439,8 +1842,10 @@ class ToolManager:
 
         self.points_label = ttk.Label(self.form_frame, text=self.localizer("tools.points"))
         self.points_label.grid(row=6, column=0, columnspan=2, sticky="w", padx=4, pady=(8, 2))
+        self.points_help = self.app.create_help_button(self.form_frame, "tool_manager")
+        self.points_help.grid(row=6, column=2, sticky="e", padx=(0, 4), pady=(8, 2))
         self.points_text = tk.Text(self.form_frame, height=7, wrap="none")
-        self.points_text.grid(row=7, column=0, columnspan=2, sticky="nsew", padx=4, pady=2)
+        self.points_text.grid(row=7, column=0, columnspan=3, sticky="nsew", padx=4, pady=2)
         self.form_frame.rowconfigure(7, weight=1)
 
         self.buttons_frame = ttk.Frame(self.window)
@@ -1453,6 +1858,7 @@ class ToolManager:
         ]
 
         self.note = ttk.Label(self.window, text=self.localizer("tools.builtin_note"), wraplength=460)
+        self.note_help = self.app.create_help_button(self.window, "tool_manager")
 
         self._apply_responsive_layout(760)
         self.window.bind("<Configure>", self._on_configure)
@@ -1464,6 +1870,8 @@ class ToolManager:
         entry = ttk.Entry(self.form_frame, textvariable=variable)
         label.grid(row=row, column=0, sticky="w", padx=4, pady=(8, 2))
         entry.grid(row=row, column=1, sticky="ew", padx=4, pady=(8, 2))
+        help_button = self.app.create_help_button(self.form_frame, "tool_manager")
+        help_button.grid(row=row, column=2, sticky="e", padx=(0, 4), pady=(8, 2))
         self.field_rows.append((label, entry))
 
     def _on_configure(self, event: tk.Event) -> None:
@@ -1483,6 +1891,7 @@ class ToolManager:
         self.form_frame.grid_forget()
         self.buttons_frame.grid_forget()
         self.note.grid_forget()
+        self.note_help.grid_forget()
         for index in range(4):
             self.window.columnconfigure(index, weight=0)
             self.window.rowconfigure(index, weight=0)
@@ -1495,7 +1904,8 @@ class ToolManager:
             self.list_frame.grid(row=0, column=0, rowspan=3, sticky="nsew", padx=(8, 4), pady=8)
             self.form_frame.grid(row=0, column=1, sticky="nsew", padx=(4, 8), pady=(8, 2))
             self.buttons_frame.grid(row=1, column=1, sticky="ew", padx=(4, 8), pady=6)
-            self.note.grid(row=2, column=1, sticky="ew", padx=(4, 8), pady=(2, 8))
+            self.note.grid(row=2, column=1, sticky="ew", padx=(4, 34), pady=(2, 8))
+            self.note_help.grid(row=2, column=1, sticky="e", padx=(0, 8), pady=(2, 8))
         else:
             self.window.columnconfigure(0, weight=1)
             self.window.rowconfigure(0, weight=1)
@@ -1503,8 +1913,11 @@ class ToolManager:
             self.list_frame.grid(row=0, column=0, sticky="nsew", padx=8, pady=(8, 4))
             self.form_frame.grid(row=1, column=0, sticky="nsew", padx=8, pady=4)
             self.buttons_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=4)
-            self.note.grid(row=3, column=0, sticky="ew", padx=8, pady=(4, 8))
+            self.note.grid(row=3, column=0, sticky="ew", padx=(8, 34), pady=(4, 8))
+            self.note_help.grid(row=3, column=0, sticky="e", padx=(0, 8), pady=(4, 8))
         self._update_note_wrap(width)
+        if not self.app.inline_help_var.get():
+            self.app._update_help_icons()
 
     def _layout_buttons(self, mode: str) -> None:
         """Раскладывает кнопки в одну строку или в несколько строк."""
@@ -1549,6 +1962,7 @@ class ToolManager:
 
     def add_tool(self) -> None:
         """Заполняет форму шаблоном нового пользовательского инструмента."""
+        LOGGER.debug("Preparing new custom tool form")
         new_id = f"tool-{int(time.time())}"
         self.selected_id = None
         self.id_var.set(new_id)
@@ -1564,7 +1978,9 @@ class ToolManager:
         """Создаёт пользовательскую копию выбранного инструмента."""
         tool = self._current_tool()
         if tool is None:
+            LOGGER.debug("Duplicate tool ignored: no selection")
             return
+        LOGGER.debug("Duplicating tool %s", tool.id)
         clone = tool.clone_custom(new_id=f"{tool.id}-copy-{int(time.time())}")
         self.app.settings.custom_tools.append(clone)
         self.app._refresh_tool_options()
@@ -1577,7 +1993,9 @@ class ToolManager:
         """
         tool = self._current_tool()
         if tool is None or tool.id in BUILTIN_TOOL_IDS:
+            LOGGER.debug("Delete tool ignored; selected=%s", None if tool is None else tool.id)
             return
+        LOGGER.debug("Deleting custom tool %s", tool.id)
         self.app.settings.custom_tools = [item for item in self.app.settings.custom_tools if item.id != tool.id]
         save_settings(self.app.settings)
         self.app._refresh_tool_options()
@@ -1587,6 +2005,7 @@ class ToolManager:
 
     def save_tool(self) -> None:
         """Сохраняет данные формы как пользовательский инструмент."""
+        LOGGER.debug("Saving tool form; id=%s name=%s", self.id_var.get(), self.name_var.get())
         try:
             tool = ToolProfile(
                 id=self.id_var.get().strip(),
@@ -1612,6 +2031,7 @@ class ToolManager:
         self.app.calculate()
         self.refresh_list()
         messagebox.showinfo(self.localizer("info"), self.localizer("tools.saved"))
+        LOGGER.debug("Tool saved: %s", tool.id)
 
     def _parse_points(self) -> list[ReferencePoint]:
         """Разбирает текстовое поле опорных точек в список ReferencePoint."""
@@ -1632,8 +2052,11 @@ class ToolManager:
         return list(self.app.tools.values())[selection[0]]
 
 
-def run_app() -> None:
+def run_app(debug: bool = False) -> None:
     """Создаёт Tk-приложение и запускает главный цикл обработки событий."""
+    LOGGER.debug("Creating Tk root; debug=%s", debug)
     root = tk.Tk()
     MainWindow(root)
+    LOGGER.debug("Entering Tk mainloop")
     root.mainloop()
+    LOGGER.debug("Tk mainloop finished")
