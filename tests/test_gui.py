@@ -10,10 +10,14 @@ from soil_tiller_calculator.config import AppSettings
 from soil_tiller_calculator.version import __version__
 from soil_tiller_calculator.gui import (
     AboutWindow,
+    ChangelogWindow,
     LicenseWindow,
     MainWindow,
     ToolManager,
+    format_changelog,
     is_newer_version,
+    load_changelog_entries,
+    should_show_startup_changelog,
     validate_depth,
     validate_depth_limits,
     validate_speed,
@@ -78,6 +82,22 @@ def test_version_comparison_accepts_github_release_tags() -> None:
     assert not is_newer_version("v0.2.3", "0.2.3")
 
 
+def test_startup_changelog_visibility_rules() -> None:
+    assert not should_show_startup_changelog(False, "")
+    assert should_show_startup_changelog(True, "")
+    assert should_show_startup_changelog(True, "0.2.3")
+    assert not should_show_startup_changelog(True, __version__)
+
+
+def test_changelog_resource_contains_release_history() -> None:
+    entries = load_changelog_entries()
+    text = format_changelog(entries, lambda key: "Current build" if key == "changelog.current_build" else key)
+
+    assert "Current build" in text
+    for version in ("v0.2.0", "v0.2.1", "v0.2.2", "v0.2.3", "v0.2.4"):
+        assert version in text
+
+
 def test_main_window_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     try:
         root = tk.Tk()
@@ -94,6 +114,14 @@ def test_main_window_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     app = MainWindow(root, AppSettings())
     menu = app.main_menu
     assert menu is not None
+    file_menu = app.file_menu
+    assert file_menu is not None
+    file_labels = [
+        file_menu.entrycget(index, "label")
+        for index in range((file_menu.index("end") or 0) + 1)
+        if file_menu.type(index) != "separator"
+    ]
+    assert app.localizer("changelog.title") in file_labels
     assert app.menu_labels == ("Файл", "Инструменты", "Настройки")
     assert any(label == "Версия" and value == __version__ for label, value in app.about_details())
     assert any(label == "Лицензия" and value == "MIT" for label, value in app.about_details())
@@ -184,6 +212,28 @@ def test_about_window_reports_update_status(monkeypatch: pytest.MonkeyPatch) -> 
     assert "99.0.0" in about.update_var.get()
     assert about.update_url == "https://example.test/release"
     about.destroy()
+    root.destroy()
+
+
+def test_changelog_window_shows_bundled_history(monkeypatch: pytest.MonkeyPatch) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display is not available: {exc}")
+
+    monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda _settings: None)
+    monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
+    root.withdraw()
+    app = MainWindow(root, AppSettings(language="en"))
+    changelog = ChangelogWindow(app.localizer, root)
+    changelog.window.withdraw()
+
+    text = changelog.text.get("1.0", "end")
+    assert "Current build" in text
+    assert "v0.2.4" in text
+    assert "Chocolatey" in text
+
+    changelog.window.destroy()
     root.destroy()
 
 

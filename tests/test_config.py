@@ -45,6 +45,7 @@ def test_settings_roundtrip_json() -> None:
         depth_min_cm=4.0,
         depth_max_cm=30.0,
         speed_step_kmh=0.25,
+        last_seen_changelog_version="0.2.4",
     )
     loaded = settings_from_json(settings_to_json(settings))
     assert loaded.language == "en"
@@ -56,6 +57,7 @@ def test_settings_roundtrip_json() -> None:
     assert loaded.depth_min_cm == pytest.approx(4.0)
     assert loaded.depth_max_cm == pytest.approx(30.0)
     assert loaded.speed_step_kmh == pytest.approx(0.25)
+    assert loaded.last_seen_changelog_version == "0.2.4"
     assert len(loaded.custom_tools) == 1
     assert loaded.custom_tools[0].id == "custom"
     assert loaded.custom_tools[0].width_m == pytest.approx(0.45)
@@ -71,6 +73,7 @@ def test_old_config_without_speed_limit_fields_uses_defaults() -> None:
     assert loaded.depth_min_cm == pytest.approx(5.0)
     assert loaded.depth_max_cm == pytest.approx(20.0)
     assert loaded.speed_step_kmh == pytest.approx(0.5)
+    assert loaded.last_seen_changelog_version == ""
 
 
 def test_config_rejects_wrong_schema_version() -> None:

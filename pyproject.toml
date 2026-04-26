@@ -28,7 +28,7 @@ stc = "soil_tiller_calculator.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-soil_tiller_calculator = ["locales/*.json", "LICENSE.txt"]
+soil_tiller_calculator = ["locales/*.json", "CHANGELOG.json", "LICENSE.txt"]
 
 [tool.setuptools.dynamic]
 version = {attr = "soil_tiller_calculator.version.__version__"}

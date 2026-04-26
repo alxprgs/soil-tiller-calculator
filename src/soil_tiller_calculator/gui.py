@@ -23,6 +23,7 @@ from soil_tiller_calculator.calculations import (
 from soil_tiller_calculator.config import (
     AppSettings,
     ConfigError,
+    active_config_path,
     load_settings,
     merge_imported_settings,
     move_settings_to_default_path,
@@ -40,6 +41,7 @@ LAYOUT_SETTLE_MS = 180
 TOOL_MANAGER_BREAKPOINT = 680
 ABOUT_BREAKPOINT = 520
 GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/alxprgs/soil-tiller-calculator/releases/latest"
+CHANGELOG_RESOURCE = "CHANGELOG.json"
 
 
 def validate_depth(value: str, min_cm: float = 5.0, max_cm: float = 20.0, fallback: float | None = None) -> tuple[float, bool]:
@@ -160,6 +162,52 @@ def fetch_latest_release(timeout: float = 5.0) -> tuple[str, str]:
     return tag, url
 
 
+def load_changelog_entries() -> list[dict[str, object]]:
+    """Загружает встроенную офлайн-историю изменений."""
+    try:
+        raw = resources.files("soil_tiller_calculator").joinpath(CHANGELOG_RESOURCE).read_text(encoding="utf-8")
+        entries = json.loads(raw)
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(entries, list):
+        return []
+    return [entry for entry in entries if isinstance(entry, dict)]
+
+
+def format_changelog(entries: list[dict[str, object]], localizer: Localizer) -> str:
+    """Форматирует историю изменений для текстового виджета Tk."""
+    if not entries:
+        return localizer("changelog.unavailable")
+
+    lines: list[str] = []
+    for entry in entries:
+        version = str(entry.get("version") or "")
+        if bool(entry.get("current")):
+            version = localizer("changelog.current_build")
+        date = str(entry.get("date") or "")
+        title = f"{version} - {date}" if date else version
+        lines.append(title)
+        lines.append("-" * len(title))
+        changes_data = entry.get("changes", [])
+        if isinstance(changes_data, dict):
+            language = getattr(localizer, "language", "en")
+            changes = changes_data.get(language) or changes_data.get("en") or []
+        else:
+            changes = changes_data
+        if isinstance(changes, list):
+            for change in changes:
+                lines.append(f"* {change}")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def should_show_startup_changelog(config_existed_at_start: bool, last_seen_version: str, current_version: str = __version__) -> bool:
+    """Проверяет, нужно ли показать историю изменений для существующего конфига."""
+    if not config_existed_at_start:
+        return False
+    return is_newer_version(current_version, last_seen_version)
+
+
 class MainWindow:
     """Главное окно приложения.
 
@@ -174,11 +222,15 @@ class MainWindow:
         settings: настройки приложения; если не переданы, загружаются из конфига.
         """
         self.root = root
+        self._config_existed_at_start = settings is None and active_config_path().exists()
         self.settings = settings or load_settings()
+        if settings is None and not self._config_existed_at_start:
+            self.settings.last_seen_changelog_version = __version__
         self.localizer = Localizer(self.settings.language)
         self.graph_canvas = None
         self.figure = None
         self.main_menu: tk.Menu | None = None
+        self.file_menu: tk.Menu | None = None
         self.menu_labels: tuple[str, str, str] = ()
         self._layout_mode: str | None = None
         self._graph_resize_job: str | None = None
@@ -208,6 +260,7 @@ class MainWindow:
         self._build()
         self.refresh_texts()
         self.calculate()
+        self._schedule_startup_changelog()
 
     @property
     def tools(self) -> dict[str, ToolProfile]:
@@ -383,6 +436,17 @@ class MainWindow:
     def open_about(self) -> None:
         """Открывает адаптивное окно со сведениями о приложении."""
         AboutWindow(self, self.root)
+
+    def open_changelog(self, mark_seen: bool = False) -> None:
+        """Открывает окно со встроенной историей изменений."""
+        ChangelogWindow(self.localizer, self.root)
+        if mark_seen:
+            self.settings.last_seen_changelog_version = __version__
+            save_settings(self.settings)
+
+    def _schedule_startup_changelog(self) -> None:
+        if should_show_startup_changelog(self._config_existed_at_start, self.settings.last_seen_changelog_version):
+            self.root.after_idle(lambda: self.open_changelog(mark_seen=True))
 
     def about_details(self) -> list[tuple[str, str]]:
         """Возвращает строки для окна «О приложении»."""
@@ -714,6 +778,8 @@ class MainWindow:
         file_menu.add_command(label=self.localizer("config_change_location"), command=self.choose_config_location)
         file_menu.add_command(label=self.localizer("config_use_default_location"), command=self.use_default_config_location)
         file_menu.add_separator()
+        file_menu.add_command(label=self.localizer("changelog.title"), command=self.open_changelog)
+        file_menu.add_separator()
         file_menu.add_command(label=self.localizer("about.title"), command=self.open_about)
         file_menu.add_separator()
         file_menu.add_command(label=self.localizer("exit"), command=self.root.destroy)
@@ -746,6 +812,7 @@ class MainWindow:
         menu.add_cascade(label=self.menu_labels[0], menu=file_menu)
         menu.add_cascade(label=self.menu_labels[1], menu=tools_menu)
         menu.add_cascade(label=self.menu_labels[2], menu=settings_menu)
+        self.file_menu = file_menu
         self.main_menu = menu
         self.root.configure(menu=menu)
 
@@ -903,6 +970,45 @@ class MainWindow:
         if invalid:
             return 5.0, 12.0
         return speed_min, speed_max
+
+
+class ChangelogWindow:
+    """Окно со встроенной историей релизов."""
+
+    def __init__(self, localizer: Localizer, master: tk.Tk | tk.Toplevel) -> None:
+        self.localizer = localizer
+        self.window = tk.Toplevel(master)
+        self.window.title(self.localizer("changelog.title"))
+        self.window.geometry("720x480")
+        self.window.minsize(420, 300)
+        self.window.transient(master)
+        self.window.columnconfigure(0, weight=1)
+        self.window.rowconfigure(1, weight=1)
+
+        self.title_label = ttk.Label(self.window, text=self.localizer("changelog.title"), font=("TkDefaultFont", 12, "bold"))
+        self.title_label.grid(row=0, column=0, columnspan=2, sticky="w", padx=12, pady=(12, 4))
+
+        self.text = tk.Text(self.window, wrap="word", height=18)
+        self.scrollbar = ttk.Scrollbar(self.window, orient="vertical", command=self.text.yview)
+        self.text.configure(yscrollcommand=self.scrollbar.set)
+        self.text.grid(row=1, column=0, sticky="nsew", padx=(12, 0), pady=8)
+        self.scrollbar.grid(row=1, column=1, sticky="ns", padx=(0, 12), pady=8)
+
+        self.close_button = ttk.Button(self.window, text=self.localizer("tools.close"), command=self.window.destroy)
+        self.close_button.grid(row=2, column=0, columnspan=2, sticky="e", padx=12, pady=(0, 12))
+
+        self.text.insert("1.0", format_changelog(load_changelog_entries(), self.localizer))
+        self.text.configure(state="disabled")
+        self._center_on_screen()
+        self.window.focus_set()
+
+    def _center_on_screen(self) -> None:
+        self.window.update_idletasks()
+        width = self.window.winfo_width()
+        height = self.window.winfo_height()
+        x = max(0, (self.window.winfo_screenwidth() - width) // 2)
+        y = max(0, (self.window.winfo_screenheight() - height) // 2)
+        self.window.geometry(f"{width}x{height}+{x}+{y}")
 
 
 class AboutWindow:

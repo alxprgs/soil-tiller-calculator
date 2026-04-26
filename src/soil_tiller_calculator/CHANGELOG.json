@@ -1,0 +1,93 @@
+[
+  {
+    "version": "Current build",
+    "date": "2026-04-26",
+    "current": true,
+    "changes": {
+      "en": [
+        "Package the MIT license together with the application so installed builds can always open it.",
+        "Load the license through Python package resources instead of relying on a filesystem-relative path."
+      ],
+      "ru": [
+        "MIT-лицензия теперь включается в пакет приложения, поэтому установленная сборка всегда может открыть ее текст.",
+        "Текст лицензии загружается через ресурсы Python-пакета, а не через путь относительно файловой системы."
+      ]
+    }
+  },
+  {
+    "version": "v0.2.4",
+    "date": "2026-04-25",
+    "changes": {
+      "en": [
+        "Add an About dialog with application version, launch details, license access, and GitHub update checks.",
+        "Show a live timestamp in the About window so the current runtime session is easier to identify.",
+        "Add Chocolatey packaging files and a publish workflow for Windows package distribution."
+      ],
+      "ru": [
+        "Добавлено окно «О приложении» с версией, сведениями о запуске, доступом к лицензии и проверкой обновлений на GitHub.",
+        "В окне «О приложении» появился живой timestamp, чтобы было проще отличать текущий запуск приложения.",
+        "Добавлены файлы упаковки Chocolatey и workflow публикации для распространения Windows-пакета."
+      ]
+    }
+  },
+  {
+    "version": "v0.2.3",
+    "date": "2026-04-25",
+    "changes": {
+      "en": [
+        "Add workflow inputs for release jobs and skip the Tk GUI test in environments where a display is unavailable.",
+        "Expand APT troubleshooting and display notes so Debian package installation issues are easier to diagnose.",
+        "Add the short stc command-line alias and bump the application version."
+      ],
+      "ru": [
+        "Добавлены входные параметры для release workflow и пропуск Tk GUI-теста в окружениях без доступного дисплея.",
+        "Расширены примечания по APT и диагностике отображения, чтобы проще разбирать проблемы установки Debian-пакета.",
+        "Добавлен короткий CLI-алиас stc и обновлена версия приложения."
+      ]
+    }
+  },
+  {
+    "version": "v0.2.2",
+    "date": "2026-04-25",
+    "changes": {
+      "en": [
+        "Bump the application to v0.2.2.",
+        "Publish Debian artifacts from the release pipeline."
+      ],
+      "ru": [
+        "Версия приложения поднята до v0.2.2.",
+        "Debian-артефакты публикуются через release pipeline."
+      ]
+    }
+  },
+  {
+    "version": "v0.2.1",
+    "date": "2026-04-25",
+    "changes": {
+      "en": [
+        "Upload the Debian package in CI and verify the generated artifact before publishing.",
+        "Update version.py to reflect the new release version."
+      ],
+      "ru": [
+        "Debian-пакет загружается в CI и проверяется как сгенерированный артефакт перед публикацией.",
+        "Обновлен version.py для новой версии релиза."
+      ]
+    }
+  },
+  {
+    "version": "v0.2.0",
+    "date": "2026-04-25",
+    "changes": {
+      "en": [
+        "Import the initial soil-tiller-calculator project with calculation logic, GUI, localization, and tests.",
+        "Add GitHub Actions CI for Python tests and run the GUI smoke test across the OS matrix.",
+        "Add the first release workflow and APT publishing support."
+      ],
+      "ru": [
+        "Импортирован начальный проект soil-tiller-calculator с расчетной логикой, GUI, локализацией и тестами.",
+        "Добавлен GitHub Actions CI для Python-тестов и GUI smoke-тест в матрице операционных систем.",
+        "Добавлен первый release workflow и поддержка публикации через APT."
+      ]
+    }
+  }
+]
