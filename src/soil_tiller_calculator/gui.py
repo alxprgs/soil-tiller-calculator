@@ -231,7 +231,24 @@ class MainWindow:
         self.figure = None
         self.main_menu: tk.Menu | None = None
         self.file_menu: tk.Menu | None = None
+        self.settings_menu: tk.Menu | None = None
+        self._menus: list[tk.Menu] = []
         self.menu_labels: tuple[str, str, str] = ()
+        self.ttk_style = ttk.Style(self.root)
+        self._default_theme = self.ttk_style.theme_use()
+        self._styled_widget_names = (
+            "TFrame",
+            "TLabelframe",
+            "TLabelframe.Label",
+            "TLabel",
+            "TButton",
+            "TEntry",
+            "TCombobox",
+            "TCheckbutton",
+            "TRadiobutton",
+        )
+        self._default_style_options = {style_name: self.ttk_style.configure(style_name) for style_name in self._styled_widget_names}
+        self._default_style_maps = {style_name: self.ttk_style.map(style_name) for style_name in self._styled_widget_names}
         self._layout_mode: str | None = None
         self._graph_resize_job: str | None = None
         self._layout_resize_job: str | None = None
@@ -250,6 +267,7 @@ class MainWindow:
         self.depth_min_var = tk.StringVar(value=f"{self.settings.depth_min_cm:.1f}")
         self.depth_max_var = tk.StringVar(value=f"{self.settings.depth_max_cm:.1f}")
         self.speed_step_var = tk.StringVar(value=f"{self.settings.speed_step_kmh:.1f}")
+        self.pretty_interface_var = tk.BooleanVar(value=self.settings.pretty_interface_enabled)
         self.tool_mode_var = tk.StringVar(value="builtin_compare")
         self.tool_mode_display_var = tk.StringVar()
         self.speed_mode_var = tk.StringVar(value="manual")
@@ -382,6 +400,7 @@ class MainWindow:
         self._update_speed_controls()
         self._update_speed_limit_controls()
         self._update_depth_limit_controls()
+        self._apply_interface_style()
 
     def change_language(self, language: str | None = None) -> None:
         """Переключает язык интерфейса.
@@ -433,13 +452,22 @@ class MainWindow:
         save_settings(self.settings)
         self.calculate()
 
+    def toggle_pretty_interface(self) -> None:
+        """Включает или выключает улучшенное оформление интерфейса."""
+        self.settings.pretty_interface_enabled = self.pretty_interface_var.get()
+        self._apply_interface_style()
+        save_settings(self.settings)
+        self.calculate()
+
     def open_about(self) -> None:
         """Открывает адаптивное окно со сведениями о приложении."""
-        AboutWindow(self, self.root)
+        about = AboutWindow(self, self.root)
+        self._apply_plain_widget_style(about.window)
 
     def open_changelog(self, mark_seen: bool = False) -> None:
         """Открывает окно со встроенной историей изменений."""
-        ChangelogWindow(self.localizer, self.root)
+        changelog = ChangelogWindow(self.localizer, self.root)
+        self._apply_plain_widget_style(changelog.window)
         if mark_seen:
             self.settings.last_seen_changelog_version = __version__
             save_settings(self.settings)
@@ -504,7 +532,8 @@ class MainWindow:
 
     def open_tool_manager(self) -> None:
         """Открывает отдельное окно управления пользовательскими инструментами."""
-        ToolManager(self, self.root)
+        manager = ToolManager(self, self.root)
+        self._apply_plain_widget_style(manager.window)
 
     def import_config(self) -> None:
         """Импортирует настройки и инструменты из выбранного JSON-файла."""
@@ -525,6 +554,7 @@ class MainWindow:
         self.depth_min_var.set(f"{self.settings.depth_min_cm:.1f}")
         self.depth_max_var.set(f"{self.settings.depth_max_cm:.1f}")
         self.speed_step_var.set(f"{self.settings.speed_step_kmh:.1f}")
+        self.pretty_interface_var.set(self.settings.pretty_interface_enabled)
         self.localizer.set_language(self.settings.language)
         self._refresh_tool_options()
         self.refresh_texts()
@@ -627,9 +657,12 @@ class MainWindow:
             ttk.Label(self.graphs, text=self.localizer("matplotlib_missing"), wraplength=460).grid(row=0, column=0, padx=12, pady=12)
             return
 
-        self.figure = Figure(figsize=(7.2, 5.2), dpi=100)
+        palette = self._interface_palette()
+        self.figure = Figure(figsize=(7.2, 5.2), dpi=100, facecolor=palette["figure"])
         self.graph_canvas = FigureCanvasTkAgg(self.figure, master=self.graphs)
-        self.graph_canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
+        graph_widget = self.graph_canvas.get_tk_widget()
+        graph_widget.configure(background=palette["figure"])
+        graph_widget.grid(row=0, column=0, sticky="nsew")
 
     def _render_graphs(
         self,
@@ -678,6 +711,7 @@ class MainWindow:
         q_axis.set_ylabel(self.localizer("axis_resistance"))
         q_axis.grid(True)
         q_axis.legend()
+        self._style_graph_figure()
         self.figure.tight_layout()
         self.graph_canvas.draw_idle()
 
@@ -768,6 +802,157 @@ class MainWindow:
         self.speed_mode_var.set(reverse.get(self.speed_mode_display_var.get(), "manual"))
         self._update_speed_controls()
 
+    def _interface_palette(self) -> dict[str, str]:
+        if self.pretty_interface_var.get():
+            return {
+                "window": "#edf3ee",
+                "panel": "#f8fbf7",
+                "field": "#ffffff",
+                "foreground": "#24322b",
+                "muted": "#5f7168",
+                "accent": "#2f6f4f",
+                "accent_hover": "#24583f",
+                "select": "#b8d8c4",
+                "grid": "#d5dfd7",
+                "figure": "#f4f8f3",
+                "axes": "#ffffff",
+            }
+        return {
+            "window": "#f0f0f0",
+            "panel": "#f0f0f0",
+            "field": "#ffffff",
+            "foreground": "#000000",
+            "muted": "#444444",
+            "accent": "#e1e1e1",
+            "accent_hover": "#d5d5d5",
+            "select": "#c7ddf2",
+            "grid": "#d9d9d9",
+            "figure": "#ffffff",
+            "axes": "#ffffff",
+        }
+
+    def _apply_interface_style(self) -> None:
+        enabled = self.pretty_interface_var.get()
+        if enabled and "clam" in self.ttk_style.theme_names():
+            self.ttk_style.theme_use("clam")
+        else:
+            self.ttk_style.theme_use(self._default_theme)
+
+        palette = self._interface_palette()
+        if enabled:
+            self.ttk_style.configure("TFrame", background=palette["window"])
+            self.ttk_style.configure("TLabelframe", background=palette["panel"], bordercolor=palette["grid"], relief="solid")
+            self.ttk_style.configure(
+                "TLabelframe.Label",
+                background=palette["panel"],
+                foreground=palette["accent"],
+                font=("Segoe UI", 10, "bold"),
+            )
+            self.ttk_style.configure("TLabel", background=palette["window"], foreground=palette["foreground"])
+            self.ttk_style.configure(
+                "TButton",
+                background=palette["accent"],
+                foreground="#ffffff",
+                borderwidth=1,
+                focusthickness=2,
+                focuscolor=palette["select"],
+                padding=(10, 6),
+            )
+            self.ttk_style.map(
+                "TButton",
+                background=[("active", palette["accent_hover"]), ("disabled", palette["grid"])],
+                foreground=[("disabled", palette["muted"])],
+            )
+            self.ttk_style.configure("TEntry", fieldbackground=palette["field"], foreground=palette["foreground"], padding=4)
+            self.ttk_style.configure(
+                "TCombobox",
+                fieldbackground=palette["field"],
+                foreground=palette["foreground"],
+                arrowcolor=palette["accent"],
+                padding=4,
+            )
+            self.ttk_style.configure("TCheckbutton", background=palette["window"], foreground=palette["foreground"])
+            self.ttk_style.configure("TRadiobutton", background=palette["window"], foreground=palette["foreground"])
+        else:
+            for style_name, options in self._default_style_options.items():
+                if options:
+                    self.ttk_style.configure(style_name, **options)
+            for style_name, mappings in self._default_style_maps.items():
+                if mappings:
+                    self.ttk_style.map(style_name, **mappings)
+
+        self._apply_plain_widget_style(self.root)
+        self._apply_menu_style()
+        if self.graph_canvas is not None:
+            self.graph_canvas.get_tk_widget().configure(background=palette["figure"])
+        self._style_graph_figure()
+
+    def _apply_plain_widget_style(self, widget: tk.Widget) -> None:
+        palette = self._interface_palette()
+        enabled = self.pretty_interface_var.get()
+        if isinstance(widget, (tk.Tk, tk.Toplevel, tk.Frame)):
+            widget.configure(background=palette["window"])
+        elif isinstance(widget, tk.Text):
+            widget.configure(
+                background=palette["field"],
+                foreground=palette["foreground"],
+                insertbackground=palette["foreground"],
+                selectbackground=palette["select"],
+                relief="flat" if enabled else "sunken",
+                borderwidth=1,
+                padx=8 if enabled else 1,
+                pady=8 if enabled else 1,
+            )
+        elif isinstance(widget, tk.Listbox):
+            widget.configure(
+                background=palette["field"],
+                foreground=palette["foreground"],
+                selectbackground=palette["select"],
+                selectforeground=palette["foreground"],
+                relief="flat" if enabled else "sunken",
+                borderwidth=1,
+                highlightthickness=1 if enabled else 0,
+                highlightbackground=palette["grid"],
+            )
+
+        for child in widget.winfo_children():
+            self._apply_plain_widget_style(child)
+
+    def _apply_menu_style(self) -> None:
+        palette = self._interface_palette()
+        for menu in self._menus:
+            try:
+                menu.configure(
+                    background=palette["panel"],
+                    foreground=palette["foreground"],
+                    activebackground=palette["select"],
+                    activeforeground=palette["foreground"],
+                    borderwidth=0 if self.pretty_interface_var.get() else 1,
+                )
+            except tk.TclError:
+                continue
+
+    def _style_graph_figure(self) -> None:
+        if self.figure is None:
+            return
+        palette = self._interface_palette()
+        self.figure.set_facecolor(palette["figure"])
+        for axis in self.figure.axes:
+            axis.set_facecolor(palette["axes"])
+            axis.tick_params(colors=palette["muted"])
+            axis.xaxis.label.set_color(palette["foreground"])
+            axis.yaxis.label.set_color(palette["foreground"])
+            axis.title.set_color(palette["foreground"])
+            for spine in axis.spines.values():
+                spine.set_color(palette["grid"])
+            axis.grid(True, color=palette["grid"], linewidth=0.8)
+            legend = axis.get_legend()
+            if legend is not None:
+                legend.get_frame().set_facecolor(palette["field"])
+                legend.get_frame().set_edgecolor(palette["grid"])
+                for text in legend.get_texts():
+                    text.set_color(palette["foreground"])
+
     def _build_menu(self) -> None:
         """Создаёт верхнее меню приложения и привязывает команды."""
         menu = tk.Menu(self.root)
@@ -802,6 +987,11 @@ class MainWindow:
             variable=self.custom_depth_limits_var,
             command=self.toggle_custom_depth_limits,
         )
+        settings_menu.add_checkbutton(
+            label=self.localizer("pretty_interface"),
+            variable=self.pretty_interface_var,
+            command=self.toggle_pretty_interface,
+        )
         settings_menu.add_command(label=self.localizer("speed_step"), command=self.configure_optimization_step)
 
         self.menu_labels = (
@@ -813,7 +1003,9 @@ class MainWindow:
         menu.add_cascade(label=self.menu_labels[1], menu=tools_menu)
         menu.add_cascade(label=self.menu_labels[2], menu=settings_menu)
         self.file_menu = file_menu
+        self.settings_menu = settings_menu
         self.main_menu = menu
+        self._menus = [menu, file_menu, tools_menu, settings_menu, language_menu]
         self.root.configure(menu=menu)
 
     def _speed_limits(self) -> tuple[float, float]:

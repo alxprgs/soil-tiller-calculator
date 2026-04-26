@@ -31,6 +31,7 @@
   "language_en": "English",
   "custom_speed_limits": "Custom speed limits",
   "custom_depth_limits": "Custom depth limits",
+  "pretty_interface": "Beautiful interface",
   "config_change_location": "Change config location",
   "config_use_default_location": "Use default config location",
   "config_location_changed": "Config location changed.",

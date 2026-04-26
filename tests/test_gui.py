@@ -116,12 +116,22 @@ def test_main_window_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     assert menu is not None
     file_menu = app.file_menu
     assert file_menu is not None
+    settings_menu = app.settings_menu
+    assert settings_menu is not None
     file_labels = [
         file_menu.entrycget(index, "label")
         for index in range((file_menu.index("end") or 0) + 1)
         if file_menu.type(index) != "separator"
     ]
+    settings_labels = [
+        settings_menu.entrycget(index, "label")
+        for index in range((settings_menu.index("end") or 0) + 1)
+        if settings_menu.type(index) != "separator"
+    ]
     assert app.localizer("changelog.title") in file_labels
+    assert app.localizer("pretty_interface") in settings_labels
+    assert app.pretty_interface_var.get() is False
+    assert app.settings.pretty_interface_enabled is False
     assert app.menu_labels == ("Файл", "Инструменты", "Настройки")
     assert any(label == "Версия" and value == __version__ for label, value in app.about_details())
     assert any(label == "Лицензия" and value == "MIT" for label, value in app.about_details())
@@ -156,6 +166,32 @@ def test_main_window_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     app._apply_responsive_layout(800)
     assert app.parameters.grid_info()["row"] == 0
     assert app.graphs.grid_info()["row"] == 1
+    root.destroy()
+
+
+def test_pretty_interface_toggle_updates_style_and_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk display is not available: {exc}")
+
+    saved: list[bool] = []
+    monkeypatch.setattr("soil_tiller_calculator.gui.save_settings", lambda settings: saved.append(settings.pretty_interface_enabled))
+    monkeypatch.setattr("soil_tiller_calculator.gui.messagebox.showwarning", lambda *_args, **_kwargs: None)
+    root.withdraw()
+    app = MainWindow(root, AppSettings())
+    saved.clear()
+
+    app.pretty_interface_var.set(True)
+    app.toggle_pretty_interface()
+
+    assert app.settings.pretty_interface_enabled is True
+    assert app.pretty_interface_var.get() is True
+    assert saved and all(saved_value is True for saved_value in saved)
+    assert "F -" in app.results_text.get("1.0", "end")
+    if app.figure is not None:
+        assert app.figure.axes
+        assert app.figure.get_facecolor()[:3] != (1.0, 1.0, 1.0)
     root.destroy()
 
 

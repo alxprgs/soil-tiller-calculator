@@ -31,6 +31,7 @@
   "language_en": "English",
   "custom_speed_limits": "Пользовательские пороги скорости",
   "custom_depth_limits": "Пользовательские пороги глубины",
+  "pretty_interface": "Красивый интерфейс",
   "config_change_location": "Изменить место хранения конфига",
   "config_use_default_location": "Использовать стандартное место",
   "config_location_changed": "Место хранения конфига изменено.",
