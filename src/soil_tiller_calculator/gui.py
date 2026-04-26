@@ -255,6 +255,18 @@ def format_instruction_text(localizer: Localizer) -> str:
     return "\n".join(lines).strip()
 
 
+def bring_window_to_front(window: tk.Tk | tk.Toplevel) -> None:
+    """Поднимает окно и пытается передать ему фокус в разных оконных менеджерах."""
+    try:
+        window.deiconify()
+        window.lift()
+        window.attributes("-topmost", True)
+        window.after(250, lambda: window.attributes("-topmost", False))
+        window.focus_force()
+    except tk.TclError:
+        LOGGER.debug("Unable to bring window to front", exc_info=True)
+
+
 def load_startup_settings() -> tuple[AppSettings, Path | None, Exception | None]:
     """Загружает стартовые настройки и восстанавливается после повреждённого config.json."""
     config_path = active_config_path()
@@ -419,6 +431,7 @@ class MainWindow:
         self._schedule_config_recovery_warning()
         self._schedule_startup_instruction()
         self._schedule_startup_changelog()
+        bring_window_to_front(self.root)
         LOGGER.debug("MainWindow initialization finished")
 
     @property
@@ -1511,6 +1524,7 @@ class InstructionWindow:
 
     def start_modal(self) -> None:
         """Запускает модальный режим и ждёт закрытия окна."""
+        bring_window_to_front(self.window)
         self.window.grab_set()
         self.window.focus_set()
         self.window.wait_window()
@@ -1561,7 +1575,7 @@ class InstructionWindow:
         if self.section_id in self.section_indices:
             self.text.see(self.section_indices[self.section_id])
         self._check_read_to_end()
-        self.window.focus_set()
+        bring_window_to_front(self.window)
 
     def _scroll_text(self, *args: object) -> None:
         """Прокручивает текст и проверяет достижение конца."""
@@ -2112,6 +2126,13 @@ def run_app(debug: bool = False) -> None:
     """Создаёт Tk-приложение и запускает главный цикл обработки событий."""
     LOGGER.debug("Creating Tk root; debug=%s", debug)
     root = tk.Tk()
+    LOGGER.debug(
+        "Tk ready; windowing_system=%s screen=%sx%s display=%s",
+        root.tk.call("tk", "windowingsystem"),
+        root.winfo_screenwidth(),
+        root.winfo_screenheight(),
+        root.tk.call("winfo", "screen", root),
+    )
     MainWindow(root)
     LOGGER.debug("Entering Tk mainloop")
     root.mainloop()
