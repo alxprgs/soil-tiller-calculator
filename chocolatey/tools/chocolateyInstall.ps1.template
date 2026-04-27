@@ -2,22 +2,21 @@ $ErrorActionPreference = 'Stop'
 
 $packageName = 'soil-tiller-calculator'
 $toolsDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$fileFullPath = Join-Path $toolsDir 'soil-tiller-calculator.exe'
-$url64 = 'https://github.com/alxprgs/soil-tiller-calculator/releases/download/{{RELEASE_TAG}}/SoilTillerCalculator-windows.exe'
+$installDir = Join-Path $toolsDir 'app'
+$fileFullPath = Join-Path $installDir 'SoilTillerCalculator.exe'
+$url64 = 'https://github.com/alxprgs/soil-tiller-calculator/releases/download/{{RELEASE_TAG}}/SoilTillerCalculator-windows.zip'
 $checksum64 = '{{CHECKSUM64}}'
 
 if (-not [Environment]::Is64BitOperatingSystem) {
     throw "$packageName requires a 64-bit Windows installation."
 }
 
-Get-ChocolateyWebFile `
+Install-ChocolateyZipPackage `
     -PackageName $packageName `
-    -FileFullPath $fileFullPath `
-    -Url $url64 `
     -Url64bit $url64 `
-    -Checksum $checksum64 `
     -Checksum64 $checksum64 `
-    -ChecksumType 'sha256' `
-    -ChecksumType64 'sha256'
+    -ChecksumType64 'sha256' `
+    -UnzipLocation $installDir
 
+Install-BinFile -Name 'soil-tiller-calculator' -Path $fileFullPath
 Install-BinFile -Name 'stc' -Path $fileFullPath

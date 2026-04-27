@@ -113,7 +113,7 @@ def test_changelog_resource_contains_release_history() -> None:
     text = format_changelog(entries, lambda key: "Current build" if key == "changelog.current_build" else key)
 
     assert "Current build" in text
-    for version in ("v1.0.0", "v0.2.0", "v0.2.1", "v0.2.2", "v0.2.3", "v0.2.4"):
+    for version in ("v1.1.0", "v1.0.0", "v0.2.0", "v0.2.1", "v0.2.2", "v0.2.3", "v0.2.4"):
         assert version in text
 
 
@@ -454,6 +454,7 @@ def test_changelog_window_shows_bundled_history(monkeypatch: pytest.MonkeyPatch)
 
     text = changelog.text.get("1.0", "end")
     assert "Current build" in text
+    assert "v1.1.0" in text
     assert "v1.0.0" in text
     assert "Chocolatey" in text
 

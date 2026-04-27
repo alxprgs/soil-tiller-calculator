@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import threading
+import traceback
 from pathlib import Path
 from types import FrameType
 from typing import Any
@@ -17,6 +18,8 @@ PACKAGE_ROOT = Path(__file__).resolve().parent
 PACKAGE_ROOT_TEXT = str(PACKAGE_ROOT) + os.sep
 APP_FILE_TEXT = str(Path(__file__).resolve())
 _TRACE_STATE = threading.local()
+DEBUG_LOG_PATH = Path(os.environ.get("APPDATA", Path.home())) / "SoilTillerCalculator" / "debug.log"
+STARTUP_ERROR_LOG_PATH = Path(os.environ.get("APPDATA", Path.home())) / "SoilTillerCalculator" / "startup-error.log"
 
 
 def _short_repr(value: Any, limit: int = 160) -> str:
@@ -94,15 +97,21 @@ def configure_debug_logging(debug: bool, *, trace: bool = False) -> None:
         logging.basicConfig(level=logging.WARNING, format="%(levelname)s:%(name)s:%(message)s")
         return
 
+    DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s:%(lineno)d %(message)s",
         datefmt="%H:%M:%S",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(DEBUG_LOG_PATH, mode="w", encoding="utf-8"),
+        ],
         force=True,
     )
     for noisy_logger in ("matplotlib", "PIL"):
         logging.getLogger(noisy_logger).setLevel(logging.WARNING)
     LOGGER.debug("Debug logging enabled")
+    LOGGER.debug("Debug log path=%s", DEBUG_LOG_PATH)
     LOGGER.debug("Version=%s Python=%s Executable=%s", __version__, sys.version.replace("\n", " "), sys.executable)
     LOGGER.debug("CWD=%s ARGV=%s PID=%s", os.getcwd(), sys.argv, os.getpid())
     if trace:
@@ -127,13 +136,48 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def write_startup_error(exc: BaseException) -> None:
+    """Записывает критическую ошибку запуска в файл, доступный в windowed-сборке."""
+    try:
+        STARTUP_ERROR_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        STARTUP_ERROR_LOG_PATH.write_text(
+            "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
+def show_startup_error(exc: BaseException) -> None:
+    """Показывает ошибку запуска пользователю, если консоль недоступна."""
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror(
+            "Soil Tiller Calculator",
+            f"Application failed to start.\n\n{exc}\n\nDetails: {STARTUP_ERROR_LOG_PATH}",
+        )
+        root.destroy()
+    except Exception:
+        pass
+
+
 def main(argv: list[str] | None = None) -> None:
     """Запускает графическое приложение из консольной точки входа."""
-    args = parse_args(argv)
-    debug_enabled = args.debug or args.debug_trace
-    configure_debug_logging(debug_enabled, trace=args.debug_trace)
-    LOGGER.debug("Importing GUI module")
-    from soil_tiller_calculator.gui import run_app
+    try:
+        args = parse_args(argv)
+        debug_enabled = args.debug or args.debug_trace
+        configure_debug_logging(debug_enabled, trace=args.debug_trace)
+        LOGGER.debug("Importing GUI module")
+        from soil_tiller_calculator.gui import run_app
 
-    LOGGER.debug("Starting GUI application")
-    run_app(debug=debug_enabled)
+        LOGGER.debug("Starting GUI application")
+        run_app(debug=debug_enabled)
+    except Exception as exc:
+        LOGGER.exception("Application failed to start")
+        write_startup_error(exc)
+        show_startup_error(exc)
+        raise

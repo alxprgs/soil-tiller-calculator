@@ -1,3 +1,4 @@
 $ErrorActionPreference = 'Stop'
 
+Uninstall-BinFile -Name 'soil-tiller-calculator'
 Uninstall-BinFile -Name 'stc'

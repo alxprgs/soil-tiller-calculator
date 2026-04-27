@@ -1,4 +1,4 @@
-name: Release executables
+name: Release packages
 
 on:
   release:
@@ -46,12 +46,21 @@ jobs:
       - name: Install build dependencies
         run: python -m pip install -e . pyinstaller
 
-      - name: Build executable
+      - name: Build Linux executable
+        if: runner.os == 'Linux'
         run: pyinstaller --onefile --windowed --name SoilTillerCalculator --collect-data soil_tiller_calculator src/soil_tiller_calculator/__main__.py
+
+      - name: Build Windows executable
+        if: runner.os == 'Windows'
+        run: pyinstaller --onedir --windowed --name SoilTillerCalculator --collect-data soil_tiller_calculator src/soil_tiller_calculator/__main__.py
 
       - name: Rename Linux executable
         if: runner.os == 'Linux'
         run: mv dist/SoilTillerCalculator dist/SoilTillerCalculator-linux-x86_64
+
+      - name: Package Windows executable
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path dist\SoilTillerCalculator\* -DestinationPath dist\SoilTillerCalculator-windows.zip -Force
 
       - name: Build Debian package
         if: runner.os == 'Linux'
@@ -80,10 +89,6 @@ jobs:
 
           dpkg-deb --build "$package_root" "dist/soil-tiller-calculator_${version}_amd64.deb"
           dpkg-deb --field "dist/soil-tiller-calculator_${version}_amd64.deb" Package Version Architecture
-
-      - name: Rename Windows executable
-        if: runner.os == 'Windows'
-        run: Rename-Item -Path dist/SoilTillerCalculator.exe -NewName SoilTillerCalculator-windows.exe
 
       - name: Upload executable artifact
         uses: actions/upload-artifact@v4
@@ -148,12 +153,12 @@ jobs:
 
           $version = $Matches[1]
           $releaseTag = "${{ github.event.release.tag_name }}"
-          $exePath = Get-ChildItem -LiteralPath "chocolatey-incoming" -Filter "SoilTillerCalculator-windows.exe" -File | Select-Object -First 1
-          if ($null -eq $exePath) {
-            throw "SoilTillerCalculator-windows.exe artifact was not downloaded."
+          $zipPath = Get-ChildItem -LiteralPath "chocolatey-incoming" -Filter "SoilTillerCalculator-windows.zip" -File | Select-Object -First 1
+          if ($null -eq $zipPath) {
+            throw "SoilTillerCalculator-windows.zip artifact was not downloaded."
           }
 
-          $checksum64 = (Get-FileHash -LiteralPath $exePath.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $checksum64 = (Get-FileHash -LiteralPath $zipPath.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
 
           "version=$version" >> $env:GITHUB_OUTPUT
           "release_tag=$releaseTag" >> $env:GITHUB_OUTPUT

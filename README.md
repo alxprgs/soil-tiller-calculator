@@ -1,6 +1,6 @@
 # Soil Tiller Calculator
 
-**Версия:** 1.0.0
+**Версия:** 1.1.0
 
 Приложение для автоматизированного расчёта параметров почвообрабатывающих лап.
 Программа помогает рассчитать силу тяги, удельное сопротивление, тяговую
@@ -39,6 +39,23 @@ choco install soil-tiller-calculator
 soil-tiller-calculator
 stc
 ```
+
+Chocolatey-пакет скачивает Windows-архив `SoilTillerCalculator-windows.zip`,
+распаковывает его в каталог пакета и создаёт команды `soil-tiller-calculator`
+и `stc`. Windows-сборка публикуется архивом, а не одиночным `onefile`-exe,
+чтобы запуск на чистых системах не зависел от скрытой распаковки PyInstaller.
+
+### Windows вручную из zip-архива
+
+Скачайте `SoilTillerCalculator-windows.zip` со страницы релиза GitHub,
+распакуйте архив целиком в отдельную папку и запускайте:
+
+```powershell
+.\SoilTillerCalculator.exe
+```
+
+Не запускайте `SoilTillerCalculator.exe` прямо из zip-архива: рядом с ним
+должна оставаться папка `_internal` с библиотеками приложения.
 
 ### Ubuntu через APT-репозиторий
 
@@ -138,6 +155,18 @@ soil-tiller-calculator --debug
 
 Если нужна низкоуровневая трассировка вызовов функций пакета, есть отдельный
 флаг `--debug-trace`. Он очень шумный и заметно замедляет запуск.
+
+В windowed-сборке критические ошибки раннего запуска записываются в файл:
+
+```powershell
+%APPDATA%\SoilTillerCalculator\startup-error.log
+```
+
+При запуске с `--debug` подробный журнал пишется в:
+
+```powershell
+%APPDATA%\SoilTillerCalculator\debug.log
+```
 
 ## Как пользоваться
 

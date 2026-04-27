@@ -1,8 +1,26 @@
 [
   {
+    "version": "v1.1.0",
+    "date": "2026-04-27",
+    "current": true,
+    "changes": {
+      "en": [
+        "Bump the application to v1.1.0.",
+        "Publish the Windows build as a zipped onedir package to avoid slow hidden onefile startup on clean systems.",
+        "Install the Windows Chocolatey package from the release zip and create both soil-tiller-calculator and stc commands.",
+        "Write startup failures from windowed builds to startup-error.log so clean-machine launch issues are diagnosable."
+      ],
+      "ru": [
+        "Версия приложения поднята до v1.1.0.",
+        "Windows-сборка публикуется как zip-архив onedir, чтобы на чистых системах не было долгого скрытого запуска onefile-сборки.",
+        "Chocolatey-пакет для Windows устанавливается из release zip и создаёт команды soil-tiller-calculator и stc.",
+        "Ошибки раннего запуска windowed-сборок записываются в startup-error.log, чтобы проблемы на чистых машинах было проще диагностировать."
+      ]
+    }
+  },
+  {
     "version": "v1.0.0",
     "date": "2026-04-26",
-    "current": true,
     "changes": {
       "en": [
         "Bump the application to v1.0.0.",
