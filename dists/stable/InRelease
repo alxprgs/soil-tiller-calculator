@@ -4,40 +4,40 @@ Hash: SHA512
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Sun, 26 Apr 2026 16:27:51 +0000
+Date: Wed, 29 Apr 2026 19:12:16 +0000
 Description: Soil Tiller Calculator APT repository
 Label: soil-tiller-calculator
 Origin: soil-tiller-calculator
 Suite: stable
 MD5Sum:
- 4b7455596730c61c2ca3442d61571fb4              219 Release
- 2ca6bfd838a582e8fc62772196cc40e8              477 main/binary-amd64/Packages
- 3bad1b363bd2fea5b22215e16b07785e              331 main/binary-amd64/Packages.gz
+ 3aa88aa79017a40f359d6bf4eff379dc              219 Release
+ b40e1c6032af988625e93757eaa30bd5              477 main/binary-amd64/Packages
+ 6a5e87e471663735c9362c1e70fbcbd4              333 main/binary-amd64/Packages.gz
 SHA1:
- e6e8953e0852d298ab2b0b5806df73ff98886854              219 Release
- 94ab8008802f78c163bc6cd3933b15acbd955c75              477 main/binary-amd64/Packages
- bb097e647d6b2d5038d6bdb4b21d2286ca1a7d25              331 main/binary-amd64/Packages.gz
+ 2c220d799715ed204a8e7ad4d0542bd236a6abe0              219 Release
+ 7ef2f2b6cfc70b269a4c86243a6f17341a69bcff              477 main/binary-amd64/Packages
+ 772fcd541214003201fe725efa398b8975887819              333 main/binary-amd64/Packages.gz
 SHA256:
- 7c4281e27a7cbad004784a35ddd1c3855243c902dfba3e1c3433d4ba13f1df35              219 Release
- 73035368de6da41507555833500d5370950d431c8efbd2d07da1a73dcafda1e0              477 main/binary-amd64/Packages
- 20bc524bf4cfde905ff802a05e21ad15a7e73223ef5d83f522185fb28bd1122f              331 main/binary-amd64/Packages.gz
+ 9ddf3322e978fa209ab63cc0a082975e281478de10f71cb0f47e214192cd5acc              219 Release
+ e3730fceee716157a890f93aac0b0241f787723103ee3226b2543d1179226280              477 main/binary-amd64/Packages
+ c6f98bb2e3179dbe005d25d4c57f11a764265c1f2405e19960251fef1c2d0f37              333 main/binary-amd64/Packages.gz
 SHA512:
- ed695d4037b2599b6afc759af24d0028867c5122933916a17ab9b600d67ddb9930febdc1a1d3a2e79d1e014a3af94b2369475f04b972b2f4181956fc6ddf3ce0              219 Release
- 22b3cf5d51b0746e6679e9f47d05be65d6082b8ae756188f4fadd2541c3636e037a6cb1a508f8b87c6e2e873e737320ae803524e9b3e34c1d9412d32a6d644d2              477 main/binary-amd64/Packages
- 46e0d50347157bb69209b4d29c3a825dd511d7169952cd10c7860e00af2f7dde60de5a5f17a4bcfba16324b1d0f428f83d39d846bdb2443f960f9b4ca0918f52              331 main/binary-amd64/Packages.gz
+ 7bd6770857ac7e6da17cf79a0e800301497d9c6f2ffc953f41754a3548ec1ec77682664d9708b9f52764ceddcd1e3b7ee25a10c84f6e9b7eaa890dbe909dc103              219 Release
+ df1a7d86d28efda7b0b20726259b399754bce84568b8831cca27e1d01da228d192d6766989147f37f35e7958f462a51a6b103fde5f692232fbadff6f916c7074              477 main/binary-amd64/Packages
+ c1b86ddf532bc3ad70dbef07358cd877f0e294be82cc71968f5ebde9928a800322c83cff0ea8efaee675e9e95038e19102fd7455f713557d3dc22cfe2cccd0dc              333 main/binary-amd64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCgAdFiEEDIGB6JOnYuqmAUN4Ne0E7x7v72EFAmnuPQgACgkQNe0E7x7v
-72FuJA/9FEiY2dpViRh1JxesNmC3Zf7q9kRc3+x7JMcopJwNVOPb5B+1OoojAt9w
-xkWIOEQY7qME/FlMekQjJf8LxZJaJ6dS1LuA491xA/49HpvHHJLMS2n5VEHbOteZ
-zJS3amGJySrlKHr4w9TxwXELzWILpjFn/AY9fEZf2QRLOjVCpenGrsSpdKSe/1cx
-BRFxo1xuYYrJzpziY82S5Fy23NSNyHVN2TYEEdipZTspaVDB69mI0iTieC96OyjB
-gMqRfvRKt6Rrka2o7QvHLxiyWjZW4C7Nhw65tHy8lnRxnjFt9tAs8340yA+hWI/h
-YpJqnB2fkpY/O5uoXzDiZo3QojIXZWSo4S33u3bHPl7iFbcYOErAKrvMWdruZbvm
-/jfZ/U7/+j2sOLtVnvyLxdkH2wdCY/cTsubXFYaXZK8X2YJ0QVjN9gg84tpQfUZc
-XAY3hgaKQfTeKmmndJQ3Ei5cQPHBfGkp2jrl9s+zfe1chCY/xSTbQHyyMpSw9Da7
-wIheeynZ0WoX3guewfSHVSk9pGrOOmbnKVsDM94Oqrer+DkL8qKSWpwDQPa8QaSZ
-LUcMV4Tfe9SVEJRSg4abehatsBEc/D9tKpwKy3pdxJfzhO3Ni0O4noSAHq7S++Uq
-5B/04N7aqVbZ5ugLNldlao2w2mwj5dZBQev2tD/GkRw+tQ3AHHU=
-=JT1X
+iQIzBAEBCgAdFiEEDIGB6JOnYuqmAUN4Ne0E7x7v72EFAmnyWBEACgkQNe0E7x7v
+72HBkBAAhXzQDGrk4LmTsF8uRk+LGRE5hBStsi2fonJKMzj4s1dh9DiIu2GcLdPH
+Zc1BPy/LCLfKrcI9wqJO8NpfiKFyFN4OHpxYR9BB1tQNwD531+ukXvcgd7oe1OII
+ntA5icGsOGTQRKHvY4SY5Sz0W2HnI/QwMCNfoOw2ryoSleT/dSr8PLCixnjDdqpU
+iY7Jt/ZcJbAz9/EHR+ND22Lt9g3e2bia2wzB9C/Z7YWMwZ6DjPgW9C4BsmpHy/UQ
+irnCB9EN6GIMCsXiT1cxEXKKajDSfrdVBb/5927lZEEusEHpFWHKYqzcU1D2sYoj
+t1ig4ADBJuKo5X3PX1oaIWlg8dKJXkjuByx7qJBdl+QjK6lqntTwx6c4S/PrB80Y
+tndNXuX6NTW67W04fnglExA+1WpOhqoWKkHsGl64Mvgy1xds3CXkoGwp8on8rsO6
+dQcbvRHyevwSRGyjH1bwlneAtK9a7ZE69BJACFFDQwi5rihFqxkV0HWlNZXK4XvM
+Ze95UVjkglUfMbGWrfST43PAHOFornOf+C1oddIgBhxDexyj2803o3HJoF16swBJ
+GwDH3rTgoTabBhyT9+166P/SxaJwI+ERikkPtmA4iHRohC/aCqm4GRouakmxQteT
+/KlIj/KpHfNsu9AFyXpZSASqSW5EE0Polkg/y3V54ozxY8nm7WA=
+=unnP
 -----END PGP SIGNATURE-----
