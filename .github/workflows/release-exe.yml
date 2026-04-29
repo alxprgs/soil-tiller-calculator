@@ -54,6 +54,31 @@ jobs:
         if: runner.os == 'Windows'
         run: pyinstaller --onedir --windowed --name SoilTillerCalculator --collect-data soil_tiller_calculator src/soil_tiller_calculator/__main__.py
 
+      - name: Add Windows archive readme
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $readmePath = "dist\SoilTillerCalculator\Readme.txt"
+          @'
+          Soil Tiller Calculator
+
+          Установка:
+          1. Распакуйте архив целиком в отдельную папку.
+          2. Запустите SoilTillerCalculator.exe.
+
+          Важно:
+          Не запускайте SoilTillerCalculator.exe прямо из zip-архива. Рядом с exe должна оставаться папка _internal с файлами приложения.
+
+          Командная установка:
+          Этот же архив используется Chocolatey-пакетом soil-tiller-calculator.
+          После установки через Chocolatey доступны команды:
+          - soil-tiller-calculator
+          - stc
+
+          Проект:
+          https://github.com/alxprgs/soil-tiller-calculator
+          '@ | Set-Content -LiteralPath $readmePath -Encoding UTF8
+
       - name: Rename Linux executable
         if: runner.os == 'Linux'
         run: mv dist/SoilTillerCalculator dist/SoilTillerCalculator-linux-x86_64
@@ -61,6 +86,30 @@ jobs:
       - name: Package Windows executable
         if: runner.os == 'Windows'
         run: Compress-Archive -Path dist\SoilTillerCalculator\* -DestinationPath dist\SoilTillerCalculator-windows.zip -Force
+
+      - name: Validate Windows zip package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+          $zipPath = "dist\SoilTillerCalculator-windows.zip"
+          if (-not (Test-Path -LiteralPath $zipPath)) {
+            throw "Windows zip archive was not created: $zipPath"
+          }
+
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+          try {
+            $entries = $zip.Entries.FullName -replace '/', '\'
+            foreach ($requiredEntry in @("SoilTillerCalculator.exe", "Readme.txt")) {
+              if ($requiredEntry -notin $entries) {
+                throw "Windows zip archive does not contain required file: $requiredEntry"
+              }
+            }
+          }
+          finally {
+            $zip.Dispose()
+          }
 
       - name: Build Debian package
         if: runner.os == 'Linux'
